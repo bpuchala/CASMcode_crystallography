@@ -161,6 +161,16 @@ xtal::Lattice make_superduperlattice(
   }
 }
 
+xtal::Lattice enforce_lattice_point_group(
+    xtal::Lattice const &lattice, std::vector<xtal::SymOp> const &point_group) {
+  return xtal::symmetrize(lattice, point_group);
+}
+
+xtal::Lattice symmetrize_lattice(xtal::Lattice const &lattice,
+                                 double point_group_tolerance) {
+  return xtal::symmetrize(lattice, point_group_tolerance);
+}
+
 // DoFSetBasis
 
 struct DoFSetBasis {
@@ -347,21 +357,6 @@ std::shared_ptr<xtal::BasicStructure> make_prim(
   return shared_prim;
 }
 
-void init_prim(
-    xtal::BasicStructure &obj, xtal::Lattice const &lattice,
-    Eigen::MatrixXd const &coordinate_frac,
-    std::vector<std::vector<std::string>> const &occ_dof,
-    std::vector<std::vector<DoFSetBasis>> const &local_dof =
-        std::vector<std::vector<DoFSetBasis>>{},
-    std::vector<DoFSetBasis> const &global_dof = std::vector<DoFSetBasis>{},
-    std::map<std::string, xtal::Molecule> const &molecules =
-        std::map<std::string, xtal::Molecule>{},
-    std::string title = std::string("prim")) {
-  auto prim = make_prim(lattice, coordinate_frac, occ_dof, local_dof,
-                        global_dof, molecules, title);
-  new (&obj) xtal::BasicStructure(*prim);
-}
-
 /// \brief Construct xtal::BasicStructure from JSON string
 std::shared_ptr<xtal::BasicStructure const> prim_from_json(
     std::string const &prim_json_str, double xtal_tol) {
@@ -518,6 +513,76 @@ std::vector<xtal::SymOp> make_prim_crystal_point_group(
   return xtal::make_crystal_point_group(fg, prim->lattice().tol());
 }
 
+std::shared_ptr<xtal::BasicStructure const> enforce_prim_factor_group(
+    std::shared_ptr<xtal::BasicStructure const> const &prim,
+    std::vector<xtal::SymOp> factor_group) {
+  xtal::BasicStructure basic_structure = *prim;
+  xtal::sort_factor_group(factor_group, prim->lattice());
+  std::vector<xtal::SymOp> point_group =
+      xtal::make_crystal_point_group(factor_group, prim->lattice().tol());
+
+  // symmetrize lattice
+  basic_structure.set_lattice(
+      enforce_lattice_point_group(basic_structure.lattice(), point_group),
+      FRAC);
+
+  // symmetrize the basis
+  auto symmetrized_prim = std::make_shared<xtal::BasicStructure const>(
+      xtal::symmetrize(basic_structure, factor_group));
+
+  // ensure it is primitive and canonical
+  return make_canonical_prim(make_primitive(symmetrized_prim));
+}
+
+std::shared_ptr<xtal::BasicStructure const> symmetrize_prim(
+    std::shared_ptr<xtal::BasicStructure const> const &prim,
+    double factor_group_tolerance) {
+  double primitive_tol = factor_group_tolerance;
+  xtal::BasicStructure basic_structure = *prim;
+
+  // make primitive if necessary
+  bool input_structure_is_primitive =
+      xtal::is_primitive(basic_structure, primitive_tol);
+  if (!input_structure_is_primitive) {
+    basic_structure = xtal::make_primitive(basic_structure, primitive_tol);
+  }
+
+  // symmetrize lattice using factor_group_tolerance
+  xtal::Lattice symmetrized_lattice{
+      xtal::symmetrize(basic_structure.lattice(), factor_group_tolerance)
+          .lat_column_mat(),
+      factor_group_tolerance};
+  basic_structure.set_lattice(symmetrized_lattice, FRAC);
+
+  // make the factor group to be enforced
+  std::vector<xtal::SymOp> enforced_factor_group =
+      make_factor_group(basic_structure);
+
+  // symmetrize the basis
+  std::cout << "prim->basis().size(): " << prim->basis().size() << std::endl;
+  auto symmetrized_prim = std::make_shared<xtal::BasicStructure const>(
+      symmetrize(*prim, enforced_factor_group));
+
+  std::cout << "symmetrized_prim->basis().size(): "
+            << symmetrized_prim->basis().size() << std::endl;
+  std::cout << "basis.frac: \n"
+            << get_prim_coordinate_frac(symmetrized_prim).transpose()
+            << std::endl;
+
+  // ensure it is primitive and canonical
+  auto result1 = make_primitive(symmetrized_prim);
+  std::cout << "primitive_prim->basis().size(): " << result1->basis().size()
+            << std::endl;
+  std::cout << "basis.frac: \n"
+            << get_prim_coordinate_frac(result1).transpose() << std::endl;
+
+  auto result2 = make_canonical_prim(result1);
+  std::cout << "canonical_prim->basis().size(): " << result2->basis().size()
+            << std::endl;
+
+  return result2;
+}
+
 // SymOp
 
 xtal::SymOp make_symop(Eigen::Matrix3d const &matrix,
@@ -582,6 +647,8 @@ std::string syminfo_to_json(xtal::SymInfo const &syminfo) {
   ss << json;
   return ss.str();
 }
+
+// Structure
 
 xtal::SimpleStructure make_simplestructure(
     xtal::Lattice const &lattice,
@@ -673,15 +740,31 @@ std::string simplestructure_to_json(xtal::SimpleStructure const &simple) {
   return ss.str();
 }
 
-std::vector<xtal::SymOp> make_simplestructure_factor_group(
-    xtal::SimpleStructure const &simple) {
+// uses atoms as prim occupants
+std::shared_ptr<xtal::BasicStructure const> _simplestructure_as_prim(
+    xtal::SimpleStructure const &simple, double lattice_tol = TOL) {
   std::vector<std::vector<std::string>> occ_dof;
   for (std::string name : simple.atom_info.names) {
     occ_dof.push_back({name});
   }
+  return make_prim(xtal::Lattice(simple.lat_column_mat, lattice_tol),
+                   get_simplestructure_atom_coordinate_frac(simple), occ_dof);
+}
+
+bool _has_properties(xtal::SimpleStructure const &simple) {
+  return simple.atom_info.properties.size() ||
+         simple.mol_info.properties.size() || simple.properties.size();
+}
+
+std::vector<xtal::SymOp> make_simplestructure_factor_group(
+    xtal::SimpleStructure const &simple) {
+  if (_has_properties(simple)) {
+    throw std::runtime_error(
+        "Error: Constructing the factor group for a structure with properties "
+        "is not yet supported");
+  }
   std::shared_ptr<xtal::BasicStructure const> prim =
-      make_prim(get_simplestructure_lattice(simple),
-                get_simplestructure_atom_coordinate_frac(simple), occ_dof);
+      _simplestructure_as_prim(simple);
   return xtal::make_factor_group(*prim);
 }
 
@@ -697,6 +780,30 @@ xtal::SimpleStructure make_superstructure(
   return xtal::make_superstructure(transformation_matrix_to_super.cast<int>(),
                                    simple);
 }
+
+xtal::SimpleStructure enforce_simplestructure_factor_group(
+    xtal::SimpleStructure const &simple,
+    std::vector<xtal::SymOp> const &factor_group) {
+  if (_has_properties(simple)) {
+    throw std::runtime_error(
+        "Error: Symmetrizing a structure with properties is not yet supported");
+  }
+  return xtal::make_simple_structure(*enforce_prim_factor_group(
+      _simplestructure_as_prim(simple), factor_group));
+}
+
+xtal::SimpleStructure symmetrize_simplestructure(
+    xtal::SimpleStructure const &simple, double factor_group_tolerance) {
+  if (_has_properties(simple)) {
+    throw std::runtime_error(
+        "Error: Symmetrizing a structure with properties is not yet supported");
+  }
+  auto fg = xtal::make_factor_group(
+      *_simplestructure_as_prim(simple, factor_group_tolerance));
+  return enforce_simplestructure_factor_group(simple, fg);
+}
+
+// Properties
 
 std::vector<Eigen::VectorXd> make_equivalent_property_values(
     std::vector<xtal::SymOp> const &point_group, Eigen::VectorXd const &x,
@@ -719,6 +826,24 @@ std::vector<Eigen::VectorXd> make_equivalent_property_values(
     equivalent_x.insert(basis_pinv * M * x_standard);
   }
   return std::vector<Eigen::VectorXd>(equivalent_x.begin(), equivalent_x.end());
+}
+
+std::vector<Eigen::MatrixXd> make_group_matrix_rep(
+    std::vector<xtal::SymOp> const &group, std::string property_type,
+    Eigen::MatrixXd basis = Eigen::MatrixXd(0, 0)) {
+  std::vector<Eigen::MatrixXd> group_rep;
+  AnisoValTraits traits(property_type);
+  if (basis.cols() == 0) {
+    Index dim = traits.dim();
+    basis = Eigen::MatrixXd::Identity(dim, dim);
+  }
+  Eigen::MatrixXd basis_pinv = _xtal_impl::pseudoinverse(basis);
+  for (auto const &op : group) {
+    Eigen::MatrixXd M = traits.symop_to_matrix(op.matrix, op.translation,
+                                               op.is_time_reversal_active);
+    group_rep.push_back(basis_pinv * M * basis);
+  }
+  return group_rep;
 }
 
 /// \brief Holds strain metric and basis to facilitate conversions
@@ -1182,6 +1307,57 @@ PYBIND11_MODULE(xtal, m) {
      RuntimeError:
          If superlattice is not a superlattice of unit_lattice.
      )pbdoc");
+
+  m.def("enforce_lattice_point_group", &enforce_lattice_point_group,
+        py::arg("lattice"), py::arg("point_group"),
+        R"pbdoc(
+     Return a symmetrized lattice
+
+     Group operations are applied to a lattice and the resulting
+     lattices are averaged. If the original lattice is only slightly
+     different from a lattice with the provided point group, the
+     point group of the resulting lattice will equal to the provided
+     point group.
+
+     Parameters
+     ----------
+     lattice : casm.xtal.Lattice
+         The input lattice.
+     point_group : List[casm.xtal.SymOp]
+         Point group operations to use to construct an averaged
+         lattice.
+
+     Returns
+     -------
+     symmetrized_lattice: casm.xtal.Lattice
+         Average lattice after applying point group operations.
+
+     )pbdoc");
+
+  m.def("symmetrize_lattice", &symmetrize_lattice, py::arg("lattice"),
+        py::arg("point_group_tolerance"),
+        R"pbdoc(
+    Return a symmetrized lattice
+
+    This method is similar to :func:`casm.xtal.enforce_lattice_point_group`,
+    but the point group used to generate the average lattice is
+    the point group of the input lattice when the lattice tolerance
+    is set to `point_group_tolerance`.
+
+    Parameters
+    ----------
+    lattice : casm.xtal.Lattice
+        The input lattice.
+    point_group_tolerance : List[casm.xtal.SymOp]
+        Tolerance used to generate the point group operations which are
+        applied to construct an averaged lattice.
+
+    Returns
+    -------
+    symmetrized_lattice: casm.xtal.Lattice
+        Average lattice after applying point group operations.
+
+    )pbdoc");
 
   m.def("enumerate_superlattices", &enumerate_superlattices,
         py::arg("unit_lattice"), py::arg("point_group"), py::arg("max_volume"),
@@ -1727,6 +1903,57 @@ PYBIND11_MODULE(xtal, m) {
         py::arg("prim"),
         "Equivalent to :func:`~casm.xtal.make_prim_crystal_point_group`");
 
+  m.def("enforce_prim_factor_group", &enforce_prim_factor_group,
+        py::arg("prim"), py::arg("point_group"),
+        R"pbdoc(
+     Return a symmetrized prim
+
+     Group operations are applied to the prim's lattice and basis
+     sites and the resulting prim are averaged. If the original prim
+     is only slightly different from a prim with the provided factor
+     group, the factor group of the resulting prim will be equal to
+     the provided factor group.
+
+     Parameters
+     ----------
+     prim : casm.xtal.Prim
+         The input lattice.
+     factor_group : List[casm.xtal.SymOp]
+         Factor group operations to use to construct an averaged
+         prim.
+
+     Returns
+     -------
+     symmetrized_prim: casm.xtal.Prim
+         Average prim after applying factor group operations.
+
+     )pbdoc");
+
+  m.def("symmetrize_prim", &symmetrize_prim, py::arg("prim"),
+        py::arg("factor_group_tolerance"),
+        R"pbdoc(
+    Return a symmetrized prim
+
+    This method is similar to :func:`casm.xtal.enforce_prim_point_group`,
+    but the factor group used to generate the average prim is
+    the factor group of the input prim when the lattice tolerance
+    is set to `factor_group_tolerance`.
+
+    Parameters
+    ----------
+    prim : casm.xtal.Prim
+        The input prim.
+    factor_group_tolerance : List[casm.xtal.SymOp]
+        Tolerance used to generate the factor group operations which are
+        applied to construct an averaged prim.
+
+    Returns
+    -------
+    symmetrized_prim: casm.xtal.Prim
+        Average prim after applying factor group operations.
+
+    )pbdoc");
+
   py::class_<xtal::SymOp>(m, "SymOp", R"pbdoc(
       A symmetry operation representation that acts on Cartesian coordinates
 
@@ -1883,7 +2110,7 @@ PYBIND11_MODULE(xtal, m) {
   py::class_<xtal::SimpleStructure>(m, "Structure", R"pbdoc(
     A crystal structure
 
-    Structure may specify atom and / or molecule coordinates and properties:
+    Structure may specify atom or molecule coordinates and properties:
 
     - lattice vectors
     - atom coordinates
@@ -2055,6 +2282,58 @@ PYBIND11_MODULE(xtal, m) {
           The superstructure.
       )pbdoc");
 
+  m.def("enforce_structure_factor_group", &enforce_simplestructure_factor_group,
+        py::arg("structure"), py::arg("factor_group"),
+        R"pbdoc(
+     Return a symmetrized atomic structure
+
+     Group operations are applied to the structure's lattice and
+     atom coordinates and atom properties and the resulting
+     structures are averaged. If the original prim
+     is only slightly different from a prim with the provided factor
+     group, the factor group of the resulting structure will be equal
+     to the provided factor group.
+
+     Parameters
+     ----------
+     structure : casm.xtal.Structure
+         The input structure.
+     factor_group : List[casm.xtal.SymOp]
+         Factor group operations to use to construct an averaged
+         atomic structure.
+
+     Returns
+     -------
+     symmetrized_structure: casm.xtal.Structure
+         Average atomic structure after applying factor group operations.
+
+     )pbdoc");
+
+  m.def("symmetrize_structure", &symmetrize_simplestructure,
+        py::arg("structure"), py::arg("factor_group_tolerance"),
+        R"pbdoc(
+    Return a symmetrized structure
+
+    This method is similar to :func:`casm.xtal.enforce_structure_point_group`,
+    but the factor group used to generate the average structure is
+    the factor group of the input structure when the lattice tolerance
+    is set to `factor_group_tolerance`.
+
+    Parameters
+    ----------
+    structure : casm.xtal.Structure
+        The input structure.
+    factor_group_tolerance : List[casm.xtal.SymOp]
+        Tolerance used to generate the factor group operations which are
+        applied to construct an averaged structure.
+
+    Returns
+    -------
+    symmetrized_structure: casm.xtal.Structure
+        Average structure after applying factor group operations.
+
+    )pbdoc");
+
   m.def("make_equivalent_property_values", &make_equivalent_property_values,
         py::arg("point_group"), py::arg("x"), py::arg("property_type"),
         py::arg("basis") = Eigen::MatrixXd(0, 0), py::arg("tol") = TOL,
@@ -2094,6 +2373,38 @@ PYBIND11_MODULE(xtal, m) {
       equivalent_x: List[numpy.ndarray[numpy.float64[m, 1]]]
           A list of distinct property values, in the given basis,
           equivalent under the point group.
+      )pbdoc");
+
+  m.def("make_group_matrix_rep", &make_group_matrix_rep, py::arg("point_group"),
+        py::arg("property_type"), py::arg("basis") = Eigen::MatrixXd(0, 0),
+        R"pbdoc(
+      Make matrix representations for transforming property values
+
+      Parameters
+      ----------
+      group : List[casm.xtal.symop]
+          Group of symmetry operations
+      property_type : string
+          The property type name. See the CASM `Degrees of Freedom (DoF) and Properties`_
+          documentation for the full list of supported properties and their
+          definitions.
+
+          .. _`Degrees of Freedom (DoF) and Properties`: https://prisms-center.github.io/CASMcode_docs/formats/dof_and_properties/
+      basis : array_like, shape=(s,m), optional
+          The basis in which the value is expressed, as columns of a
+          matrix. A property value in this basis, `x`, is related to a
+          property value in the CASM standard basis, `x_standard`,
+          according to `x_standard = basis @ x`. The number of rows in
+          the basis matrix must match the standard dimension of the CASM
+          supported property_type. The number of columns must be less
+          than or equal to the number of rows. The default value indicates
+          the standard basis should be used.
+
+      Returns
+      -------
+      group_rep: List[numpy.ndarray[numpy.float64[m, m]]]
+          A list of matrices which transform property values, in the given basis,
+          according to symmetry operations in the input group.
       )pbdoc");
 
   py::class_<StrainConverter>(m, "StrainConverter", R"pbdoc(
