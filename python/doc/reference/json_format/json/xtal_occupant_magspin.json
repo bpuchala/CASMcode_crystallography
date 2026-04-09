@@ -1,0 +1,14 @@
+{
+  "atoms": [
+    {
+      "coordinate": [0.0, 0.0, 0.0],
+      "name": "A"
+    }
+  ],
+  "name": "A",
+  "properties": {
+    "Cmagspin": {
+      "value": [1.0]
+    }
+  }
+}

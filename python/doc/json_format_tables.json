@@ -1,0 +1,389 @@
+[
+  {
+    "section": "Lattice",
+    "anchor": "xtal_Lattice",
+    "python_type": "libcasm.xtal.Lattice",
+    "description": "A crystal lattice, specified by three lattice vectors.",
+    "tables": [
+      {
+        "title": "Lattice attributes",
+        "rows": [
+          {
+            "name": "lattice_vectors",
+            "description": "Lattice vectors (as row vectors), in Angstroms.",
+            "format": {"href": "", "text": "2d array of number, shape=(3,3)"}
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "section": "Prim",
+    "anchor": "xtal_Prim",
+    "python_type": "libcasm.xtal.Prim",
+    "description": "Primitive crystal structure and allowed degrees of freedom (DoF).",
+    "tables": [
+      {
+        "title": "Prim attributes",
+        "rows": [
+          {
+            "name": "basis",
+            "description": "Basis site descriptions.",
+            "format": {"href": "#xtal-prim-site", "text": "array of Site"}
+          },
+          {
+            "name": "coordinate_mode",
+            "description": "Basis site coordinate type. One of: \"Fractional\", \"Direct\", or \"Cartesian\".",
+            "format": {"href": "", "text": "string"}
+          },
+          {
+            "name": "description",
+            "description": "Project description (optional, not used by CASM).",
+            "format": {"href": "", "text": "string"}
+          },
+          {
+            "name": "dofs",
+            "description": "Continuous global DoF (optional).",
+            "format": {"href": "xtal_DoFSetBasis.html", "text": "dict of DoFSetBasis"}
+          },
+          {
+            "name": "lattice_vectors",
+            "description": "Lattice vectors (as row vectors), in Angstroms.",
+            "format": {"href": "", "text": "2d array of number, shape=(3,3)"}
+          },
+          {
+            "name": "species",
+            "description": "Fixed atom properties and molecule definitions (optional).",
+            "format": {"href": "xtal_Occupant.html", "text": "dict of Occupant"}
+          },
+          {
+            "name": "title",
+            "description": "Project title. Must consist of alphanumeric characters and underscores only. The first character may not be a number.",
+            "format": {"href": "", "text": "string"}
+          }
+        ]
+      },
+      {
+        "title": "Site attributes",
+        "anchor": "xtal-prim-site",
+        "rows": [
+          {
+            "name": "coordinate",
+            "description": "Site coordinate with units as specified by coordinate_mode.",
+            "format": {"href": "", "text": "array of number, shape=(3,)"}
+          },
+          {
+            "name": "dofs",
+            "description": "Continuous site DoF (optional).",
+            "format": {"href": "xtal_DoFSetBasis.html", "text": "dict of DoFSetBasis"}
+          },
+          {
+            "name": "label",
+            "description": "An integer, >= 0, that distinguishes otherwise identical sites (optional).",
+            "format": {"href": "", "text": "int"}
+          },
+          {
+            "name": "occupants",
+            "description": "Allowed occupant species at this site (optional, default=[\"UNKNOWN\"]).",
+            "format": {"href": "", "text": "array of string"}
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "section": "Structure",
+    "anchor": "xtal_Structure",
+    "python_type": "libcasm.xtal.Structure",
+    "description": "A crystal structure of atomic or molecular occupants with associated properties.",
+    "tables": [
+      {
+        "title": "Structure attributes",
+        "rows": [
+          {
+            "name": "atom_coords",
+            "description": "Atom coordinates.",
+            "format": {"href": "", "text": "2d array of number, shape=(n_atoms, 3)"}
+          },
+          {
+            "name": "atom_type",
+            "description": "Atom type names.",
+            "format": {"href": "", "text": "array of string, shape=(n_atoms,)"}
+          },
+          {
+            "name": "atom_properties",
+            "description": "Continuous properties associated with individual atoms (optional).",
+            "format": {"href": "#xtal-structure-property", "text": "dict of Property"}
+          },
+          {
+            "name": "coordinate_mode",
+            "description": "Coordinate type for atom and molecule coordinates. One of: \"Fractional\", \"Direct\", or \"Cartesian\".",
+            "format": {"href": "", "text": "string"}
+          },
+          {
+            "name": "lattice_vectors",
+            "description": "Lattice vectors (as row vectors), in Angstroms.",
+            "format": {"href": "", "text": "2d array of number, shape=(3,3)"}
+          },
+          {
+            "name": "mol_coords",
+            "description": "Molecule coordinates (optional).",
+            "format": {"href": "", "text": "2d array of number, shape=(n_molecules, 3)"}
+          },
+          {
+            "name": "mol_type",
+            "description": "Molecule type names (optional).",
+            "format": {"href": "", "text": "array of string, shape=(n_molecules,)"}
+          },
+          {
+            "name": "mol_properties",
+            "description": "Continuous properties associated with individual molecules (optional).",
+            "format": {"href": "#xtal-structure-property", "text": "dict of Property"}
+          },
+          {
+            "name": "global_properties",
+            "description": "Continuous properties associated with the entire crystal (optional).",
+            "format": {"href": "#xtal-structure-property", "text": "dict of Property"}
+          }
+        ]
+      },
+      {
+        "title": "Property attributes",
+        "anchor": "xtal-structure-property",
+        "rows": [
+          {
+            "name": "value",
+            "description": "Property value. For atom and molecule properties, an array of vectors, one per atom or molecule. For global properties, a scalar or vector. Dimensions must match the standard dimension of the CASM property type.",
+            "format": {"href": "", "text": "number or array of number"}
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "section": "AtomComponent",
+    "anchor": "xtal_AtomComponent",
+    "python_type": "libcasm.xtal.AtomComponent",
+    "description": "An atomic component of a molecular occupant.",
+    "tables": [
+      {
+        "title": "AtomComponent attributes",
+        "rows": [
+          {
+            "name": "coordinate",
+            "description": "Position of the atom, relative to the basis site. Coordinate mode is the same as the enclosing Prim or Structure.",
+            "format": {"href": "", "text": "array of number, shape=(3,)"}
+          },
+          {
+            "name": "name",
+            "description": "Atom type name.",
+            "format": {"href": "", "text": "string"}
+          },
+          {
+            "name": "properties",
+            "description": "Fixed atomic properties, such as magnetic moment or selective dynamics flags (optional).",
+            "format": {"href": "#xtal-atomcomponent-speciesproperty", "text": "dict of SpeciesProperty"}
+          }
+        ]
+      },
+      {
+        "title": "SpeciesProperty attributes",
+        "anchor": "xtal-atomcomponent-speciesproperty",
+        "rows": [
+          {
+            "name": "value",
+            "description": "Species attribute value. Dimension must match the standard dimension of the CASM property type.",
+            "format": {"href": "", "text": "array of number"}
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "section": "Occupant",
+    "anchor": "xtal_Occupant",
+    "python_type": "libcasm.xtal.Occupant",
+    "description": "A site occupant, which may be a vacancy, single atom, or molecule.",
+    "tables": [
+      {
+        "title": "Occupant attributes",
+        "rows": [
+          {
+            "name": "atoms",
+            "description": "List of atoms that comprise a molecule (optional, may be excluded for single-atom occupants).",
+            "format": {"href": "xtal_AtomComponent.html", "text": "array of AtomComponent"}
+          },
+          {
+            "name": "name",
+            "description": "Chemical name of the species (optional, used to override the key in the species dict).",
+            "format": {"href": "", "text": "string"}
+          },
+          {
+            "name": "properties",
+            "description": "Fixed molecular properties, such as magnetic spin or selective dynamics flags (optional).",
+            "format": {"href": "#xtal-occupant-speciesproperty", "text": "dict of SpeciesProperty"}
+          }
+        ]
+      },
+      {
+        "title": "SpeciesProperty attributes",
+        "anchor": "xtal-occupant-speciesproperty",
+        "rows": [
+          {
+            "name": "value",
+            "description": "Species attribute value. Dimension must match the standard dimension of the CASM property type.",
+            "format": {"href": "", "text": "array of number"}
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "section": "DoFSetBasis",
+    "anchor": "xtal_DoFSetBasis",
+    "python_type": "libcasm.xtal.DoFSetBasis",
+    "description": "The basis for a set of degrees of freedom (DoF). In Prim JSON, this appears as a dict mapping DoF type names to their specifications.",
+    "tables": [
+      {
+        "title": "DoFSetBasis specification attributes",
+        "rows": [
+          {
+            "name": "axis_names",
+            "description": "Names for the individual DoF basis vectors. Required if basis is present. Size must match the number of rows in basis.",
+            "format": {"href": "", "text": "array of string, shape=(dim,)"}
+          },
+          {
+            "name": "basis",
+            "description": "Row-vector matrix defining the user-specified basis in terms of the standard basis (optional, default is the standard basis).",
+            "format": {"href": "", "text": "2d array of number, shape=(dim, standard_dim)"}
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "section": "SymOp",
+    "anchor": "xtal_SymOp",
+    "python_type": "libcasm.xtal.SymOp",
+    "description": "A symmetry operation, represented as a transformation matrix, translation vector, and time reversal flag.",
+    "tables": [
+      {
+        "title": "SymOp attributes",
+        "rows": [
+          {
+            "name": "matrix",
+            "description": "Coordinate transformation matrix.",
+            "format": {"href": "", "text": "2d array of number, shape=(3,3)"}
+          },
+          {
+            "name": "tau",
+            "description": "Coordinate translation vector.",
+            "format": {"href": "", "text": "array of number, shape=(3,)"}
+          },
+          {
+            "name": "time_reversal",
+            "description": "Whether the symmetry operation includes time reversal.",
+            "format": {"href": "", "text": "bool"}
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "section": "SymInfo",
+    "anchor": "xtal_SymInfo",
+    "python_type": "libcasm.xtal.SymInfo",
+    "description": "Symmetry operation type, axis, invariant point, and other descriptive information.",
+    "tables": [
+      {
+        "title": "SymInfo attributes",
+        "rows": [
+          {
+            "name": "angle",
+            "description": "Rotation angle in degrees.",
+            "format": {"href": "", "text": "number"}
+          },
+          {
+            "name": "brief",
+            "description": "Brief string descriptions of the symmetry operation in Cartesian (CART) and fractional (FRAC) coordinates.",
+            "format": {"href": "", "text": "dict of string"}
+          },
+          {
+            "name": "conjugacy_class",
+            "description": "Index of the conjugacy class containing this operation.",
+            "format": {"href": "", "text": "int"}
+          },
+          {
+            "name": "invariant_point",
+            "description": "A Cartesian coordinate that is invariant under the operation (does not exist for identity).",
+            "format": {"href": "", "text": "dict"}
+          },
+          {
+            "name": "inverse_operation",
+            "description": "Index in the group of the inverse operation.",
+            "format": {"href": "", "text": "int"}
+          },
+          {
+            "name": "mirror_normal",
+            "description": "Unit normal vector of mirror and glide planes (Cartesian).",
+            "format": {"href": "", "text": "dict"}
+          },
+          {
+            "name": "rotation_angle",
+            "description": "Rotation angle of the operation (degrees).",
+            "format": {"href": "", "text": "number"}
+          },
+          {
+            "name": "rotation_axis",
+            "description": "Rotation axis (Cartesian, normalized to length 1).",
+            "format": {"href": "", "text": "dict"}
+          },
+          {
+            "name": "shift",
+            "description": "Screw or glide shift vector (Cartesian).",
+            "format": {"href": "", "text": "dict"}
+          },
+          {
+            "name": "type",
+            "description": "Symmetry operation type: \"identity\", \"mirror\", \"glide\", \"rotation\", \"screw\", \"inversion\", \"rotoinversion\", or \"invalid\".",
+            "format": {"href": "", "text": "string"}
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "section": "IntegralSiteCoordinate",
+    "anchor": "xtal_IntegralSiteCoordinate",
+    "python_type": "libcasm.xtal.IntegralSiteCoordinate",
+    "description": "An integral site coordinate [b, i, j, k], where b is the sublattice index and i, j, k are unit cell indices. Serialized as a list of 4 integers.",
+    "tables": [
+      {
+        "title": "IntegralSiteCoordinate list elements",
+        "column_names": ["Index", "Description", "Format"],
+        "rows": [
+          {
+            "name": "[0]",
+            "description": "Sublattice index (b).",
+            "format": {"href": "", "text": "int"}
+          },
+          {
+            "name": "[1]",
+            "description": "Unit cell index (i).",
+            "format": {"href": "", "text": "int"}
+          },
+          {
+            "name": "[2]",
+            "description": "Unit cell index (j).",
+            "format": {"href": "", "text": "int"}
+          },
+          {
+            "name": "[3]",
+            "description": "Unit cell index (k).",
+            "format": {"href": "", "text": "int"}
+          }
+        ]
+      }
+    ]
+  }
+]

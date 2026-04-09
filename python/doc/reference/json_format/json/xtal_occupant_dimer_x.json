@@ -1,0 +1,7 @@
+{
+  "atoms": [
+    {"coordinate": [-0.1, 0.0, 0.0], "name": "A"},
+    {"coordinate": [ 0.1, 0.0, 0.0], "name": "A"}
+  ],
+  "name": "A2"
+}

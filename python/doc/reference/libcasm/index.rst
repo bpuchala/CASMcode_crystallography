@@ -1,8 +1,10 @@
 ..
     DO NOT DELETE! This causes _autosummary to generate stub files
 
-Reference (libcasm-xtal)
-========================
+.. _public_api_reference:
+
+Packages
+========
 
 .. autosummary::
     :toctree: _autosummary

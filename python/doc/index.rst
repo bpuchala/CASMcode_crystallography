@@ -46,7 +46,7 @@ Documentation
     Installation <installation>
     Usage <usage>
     Prim Examples <examples/prim/index>
-    Reference <reference/libcasm/index>
+    Reference <reference/index>
     Bibliography <bibliography>
 
 libcasm-xtal is available on GitHub_.

@@ -139,7 +139,13 @@ void from_json(xtal::Molecule &mol, const jsonParser &json,
 xtal::Molecule jsonConstructor<xtal::Molecule>::from_json(
     const jsonParser &json, Eigen::Ref<const Eigen::Matrix3d> const &f2c_mat,
     ParsingDictionary<AnisoValTraits> const &_aniso_val_dict) {
-  return json.get<xtal::Molecule>(f2c_mat, _aniso_val_dict);
+  std::string name;
+  if (json.contains("name")) {
+    name = json["name"].get<std::string>();
+  }
+  xtal::Molecule mol(name);
+  CASM::from_json(mol, json, f2c_mat, _aniso_val_dict);
+  return mol;
 }
 
 //****************************************************

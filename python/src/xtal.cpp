@@ -295,7 +295,7 @@ void parse(InputParser<std::vector<DoFSetBasis>> &parser,
     }
 
     // standard basis
-    if (!json.contains("axis_names")) {
+    if (!dof_json.contains("axis_names")) {
       std::vector<std::string> axis_names = traits.standard_var_names();
       Eigen::MatrixXd basis =
           Eigen::MatrixXd::Identity(traits.dim(), traits.dim());
@@ -305,10 +305,11 @@ void parse(InputParser<std::vector<DoFSetBasis>> &parser,
 
     // non-standard basis
     std::vector<std::string> axis_names;
-    parser.require(axis_names, "axis_names");
+    fs::path option{dofname};
+    parser.require(axis_names, option / "axis_names");
 
     Eigen::MatrixXd row_vector_basis;
-    parser.require(row_vector_basis, "basis");
+    parser.require(row_vector_basis, option/ "basis");
 
     if (row_vector_basis.rows() != axis_names.size()) {
       std::stringstream msg;

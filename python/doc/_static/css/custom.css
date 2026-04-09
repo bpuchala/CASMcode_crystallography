@@ -5,7 +5,7 @@
   --pst-color-inline-code: #0072b5;
   --sd-color-card-border-hover: #0072b5;
 
-  dt {
+  dt:not(.casm-part) {
     background-color: #eaeaea;
   }
 
@@ -18,7 +18,7 @@
   --pst-color-inline-code: #6DC8BF;
   --sd-color-card-border-hover: #6DC8BF;
 
-  dt {
+  dt:not(.casm-part) {
     background-color: #6A4729F7;
   }
 
@@ -113,4 +113,31 @@ button.copybtn:hover {
 
 .o-tooltip--left:after {
   background: none;
+}
+
+/* CASM JSON format reference tables */
+
+.casm-part {
+    margin-bottom: 10px;
+}
+
+dl.casm-list div dd {
+    margin-left: 0 !important;
+    margin-inline-start: 0px !important;
+}
+
+.casm-part code {
+    padding: 0px 10px;
+}
+
+.casm-table th, .casm-table td {
+    padding-left: 10px;
+    padding-right: 0px;
+    border: 1px solid #ddd;
+    font-size: 1em;
+}
+
+.casm-table {
+    border-collapse: collapse;
+    width: 100%;
 }
