@@ -320,6 +320,38 @@ def test_repr(simple_cubic_binary_va_disp_Hstrain_prim):
     assert "basis" in out
 
 
+def test_title():
+    lattice = xtal.Lattice(np.eye(3))
+    coordinate_frac = np.zeros((3, 1))
+    occ_dof = [["A"]]
+
+    prim_default = xtal.Prim(
+        lattice=lattice, coordinate_frac=coordinate_frac, occ_dof=occ_dof
+    )
+    assert prim_default.title() == "prim"
+
+    prim_named = xtal.Prim(
+        lattice=lattice,
+        coordinate_frac=coordinate_frac,
+        occ_dof=occ_dof,
+        title="my_prim",
+    )
+    assert prim_named.title() == "my_prim"
+
+
+def test_n_sites(simple_cubic_binary_prim, perovskite_occ_prim):
+    assert simple_cubic_binary_prim.n_sites() == 1
+    assert perovskite_occ_prim.n_sites() == 5
+
+
+def test_species(simple_cubic_binary_prim, perovskite_occ_prim):
+    assert simple_cubic_binary_prim.species() == ["A", "B"]
+
+    perovskite_species = perovskite_occ_prim.species()
+    assert sorted(perovskite_species) == perovskite_species  # sorted
+    assert set(perovskite_species) == {"La", "Nb", "O", "Sr", "Ti"}
+
+
 def test_prim_with_labels():
     lattice = xtal.Lattice(np.eye(3))
     coordinate_frac = np.array(

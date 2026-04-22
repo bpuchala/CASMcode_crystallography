@@ -309,7 +309,7 @@ void parse(InputParser<std::vector<DoFSetBasis>> &parser,
     parser.require(axis_names, option / "axis_names");
 
     Eigen::MatrixXd row_vector_basis;
-    parser.require(row_vector_basis, option/ "basis");
+    parser.require(row_vector_basis, option / "basis");
 
     if (row_vector_basis.rows() != axis_names.size()) {
       std::stringstream msg;
@@ -663,6 +663,27 @@ std::vector<Index> get_prim_labels(
     labels.push_back(site.label());
   }
   return labels;
+}
+
+std::string get_prim_title(
+    std::shared_ptr<xtal::BasicStructure const> const &prim) {
+  return prim->title();
+}
+
+Index get_prim_n_sites(
+    std::shared_ptr<xtal::BasicStructure const> const &prim) {
+  return prim->basis().size();
+}
+
+std::vector<std::string> get_prim_species(
+    std::shared_ptr<xtal::BasicStructure const> const &prim) {
+  std::set<std::string> species_set;
+  for (auto const &site_names : prim->unique_names()) {
+    for (auto const &name : site_names) {
+      species_set.insert(name);
+    }
+  }
+  return std::vector<std::string>(species_set.begin(), species_set.end());
 }
 
 std::shared_ptr<xtal::BasicStructure const> make_within(
@@ -2443,6 +2464,12 @@ PYBIND11_MODULE(_xtal, m) {
       .def("labels", &get_prim_labels,
            "Returns the integer label associated with each basis site. If no "
            "labels were provided, it will be a list of -1.")
+      .def("title", &get_prim_title, "Returns the title of the Prim.")
+      .def("n_sites", &get_prim_n_sites,
+           "Returns the number of basis sites in the Prim.")
+      .def("species", &get_prim_species,
+           "Returns the names of all species listed in occ_dof, as a sorted "
+           "list of unique values.")
       .def(
           "copy",
           [](std::shared_ptr<xtal::BasicStructure const> const &prim) {

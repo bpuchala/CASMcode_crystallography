@@ -585,15 +585,4 @@ xtal::Coordinate copy_apply(const ExternSymOp &op, xtal::Coordinate coord) {
 }  // namespace sym
 }  // namespace CASM
 
-namespace std {
-template <>
-struct is_floating_point<CASM::xtal::Coordinate_impl::FracCoordinateComponent> {
-  static const bool value = true;
-};
-
-template <>
-struct is_floating_point<CASM::xtal::Coordinate_impl::CartCoordinateComponent> {
-  static const bool value = true;
-};
-}  // namespace std
 #endif
