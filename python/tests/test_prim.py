@@ -352,6 +352,51 @@ def test_species(simple_cubic_binary_prim, perovskite_occ_prim):
     assert set(perovskite_species) == {"La", "Nb", "O", "Sr", "Ti"}
 
 
+def test_is_primitive(simple_cubic_binary_prim, nonprimitive_cubic_occ_prim):
+    assert simple_cubic_binary_prim.is_primitive() is True
+    assert nonprimitive_cubic_occ_prim.is_primitive() is False
+
+
+def test_primitive(nonprimitive_cubic_occ_prim):
+    assert nonprimitive_cubic_occ_prim.n_sites() == 2
+    prim = nonprimitive_cubic_occ_prim.primitive()
+    assert isinstance(prim, xtal.Prim)
+    assert prim.n_sites() == 1
+    assert prim.is_primitive() is True
+
+
+def symop_list_equal(a, b):
+    if len(a) != len(b):
+        return False
+    return all(
+        np.allclose(x.matrix(), y.matrix())
+        and np.allclose(x.translation(), y.translation())
+        and x.time_reversal() == y.time_reversal()
+        for x, y in zip(a, b)
+    )
+
+
+def test_factor_group(simple_cubic_binary_prim):
+    fg = simple_cubic_binary_prim.factor_group()
+    assert len(fg) == 48
+    assert symop_list_equal(fg, xtal.make_prim_factor_group(simple_cubic_binary_prim))
+
+
+def test_crystal_point_group(simple_cubic_binary_prim):
+    cpg = simple_cubic_binary_prim.crystal_point_group()
+    assert symop_list_equal(
+        cpg, xtal.make_prim_crystal_point_group(simple_cubic_binary_prim)
+    )
+
+
+def test_lattice_point_group(simple_cubic_binary_prim):
+    lpg = simple_cubic_binary_prim.lattice_point_group()
+    assert symop_list_equal(
+        lpg, xtal.make_point_group(simple_cubic_binary_prim.lattice())
+    )
+    assert symop_list_equal(lpg, simple_cubic_binary_prim.lattice().point_group())
+
+
 def test_prim_with_labels():
     lattice = xtal.Lattice(np.eye(3))
     coordinate_frac = np.array(

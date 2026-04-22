@@ -700,6 +700,11 @@ std::shared_ptr<xtal::BasicStructure const> make_primitive_prim(
   return prim;
 }
 
+bool get_prim_is_primitive(
+    std::shared_ptr<xtal::BasicStructure const> const &prim) {
+  return make_primitive_prim(prim)->basis().size() == prim->basis().size();
+}
+
 std::shared_ptr<xtal::BasicStructure const> make_canonical_prim(
     std::shared_ptr<xtal::BasicStructure const> const &init_prim) {
   auto prim = std::make_shared<xtal::BasicStructure>(*init_prim);
@@ -1505,6 +1510,23 @@ PYBIND11_MODULE(_xtal, m) {
           data: dict
               The Lattice as a Python dict.
 
+          )pbdoc")
+      .def(
+          "point_group",
+          [](xtal::Lattice const &self) {
+            return make_lattice_point_group(self);
+          },
+          R"pbdoc(
+          Returns the lattice point group
+
+          Equivalent to :func:`make_point_group`.
+
+          Returns
+          -------
+          point_group : list[:class:`SymOp`]
+              The set of rigid transformations that keep the origin fixed
+              (i.e. have zero translation vector) and map the lattice onto
+              itself.
           )pbdoc");
 
   m.def("make_canonical_lattice", &make_canonical_lattice,
@@ -2470,6 +2492,69 @@ PYBIND11_MODULE(_xtal, m) {
       .def("species", &get_prim_species,
            "Returns the names of all species listed in occ_dof, as a sorted "
            "list of unique values.")
+      .def("is_primitive", &get_prim_is_primitive,
+           R"pbdoc(
+           Returns True if this Prim is primitive, False otherwise.
+
+           A Prim is primitive if no proper subset of the basis sites can
+           be used to generate the full crystal by translation alone.
+           )pbdoc")
+      .def(
+          "primitive", &make_primitive_prim,
+          R"pbdoc(
+          Returns the primitive equivalent of this Prim.
+
+          Equivalent to :func:`make_primitive_prim`.
+
+          Returns
+          -------
+          prim : Prim
+              The primitive equivalent Prim.
+          )pbdoc")
+      .def(
+          "factor_group", &make_prim_factor_group,
+          R"pbdoc(
+          Returns the factor group.
+
+          Equivalent to :func:`make_prim_factor_group`.
+
+          Returns
+          -------
+          factor_group : list[:class:`SymOp`]
+              The set of symmetry operations, with translation lying within
+              the primitive unit cell, that leave the lattice vectors, basis
+              site coordinates, and all DoF invariant.
+          )pbdoc")
+      .def(
+          "crystal_point_group", &make_prim_crystal_point_group,
+          R"pbdoc(
+          Returns the crystal point group.
+
+          Equivalent to :func:`make_prim_crystal_point_group`.
+
+          Returns
+          -------
+          crystal_point_group : list[:class:`SymOp`]
+              The crystal point group is constructed from the factor group
+              operations with translation vector set to zero.
+          )pbdoc")
+      .def(
+          "lattice_point_group",
+          [](std::shared_ptr<xtal::BasicStructure const> const &prim) {
+            return make_lattice_point_group(prim->lattice());
+          },
+          R"pbdoc(
+          Returns the lattice point group.
+
+          Equivalent to ``prim.lattice().point_group()`` and
+          :func:`make_point_group`.
+
+          Returns
+          -------
+          point_group : list[:class:`SymOp`]
+              The set of rigid transformations that keep the origin fixed
+              and map the lattice onto itself.
+          )pbdoc")
       .def(
           "copy",
           [](std::shared_ptr<xtal::BasicStructure const> const &prim) {

@@ -5,6 +5,26 @@ All notable changes to `libcasm-xtal` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Removed dead `std::is_floating_point` specializations for `Coordinate` proxy
+  types that broke builds with updated macOS Command Line Tools (`libc++`).
+
+### Added
+
+- Added `Lattice.point_group()`, equivalent to :func:`make_point_group`.
+- Added `Prim.title()`, `Prim.n_sites()`, `Prim.species()`.
+- Added `Prim.is_primitive()`, `Prim.primitive()`, equivalent to
+  :func:`make_primitive_prim`.
+- Added `Prim.factor_group()`, equivalent to :func:`make_prim_factor_group`.
+- Added `Prim.crystal_point_group()`, equivalent to
+  :func:`make_prim_crystal_point_group`.
+- Added `Prim.lattice_point_group()`, equivalent to `Prim.lattice().point_group()`
+  and :func:`make_point_group`.
+
+
 ## [3.0a1] - 2026-03-02
 
 ### Changed
