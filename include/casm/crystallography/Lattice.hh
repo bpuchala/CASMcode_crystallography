@@ -257,6 +257,21 @@ std::istream &operator>>(std::istream &in, const Lattice &lattice_in);
 /// Lattice
 Lattice make_superduperlattice(const Lattice &lat1, const Lattice &lat2);
 
+///\brief Returns the Displacement Shift Complete (DSC) lattice of two input
+/// Lattice — the coarsest lattice whose point set contains all points of both
+Lattice make_itsybitsylattice(const Lattice &lat1, const Lattice &lat2);
+
+///\brief Alias for make_superduperlattice (CSL = Coincidence Site Lattice)
+inline Lattice make_csl(const Lattice &lat1, const Lattice &lat2) {
+  return make_superduperlattice(lat1, lat2);
+}
+
+///\brief Alias for make_itsybitsylattice (DSCL = Displacement Shift Complete
+/// Lattice)
+inline Lattice make_dscl(const Lattice &lat1, const Lattice &lat2) {
+  return make_itsybitsylattice(lat1, lat2);
+}
+
 /// \brief Returns a minimum volume Lattice obtainable by replacing one Lattice
 /// vector
 ///

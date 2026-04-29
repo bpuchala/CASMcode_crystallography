@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   :func:`make_prim_crystal_point_group`.
 - Added `Prim.lattice_point_group()`, equivalent to `Prim.lattice().point_group()`
   and :func:`make_point_group`.
+- Added `make_csl`, an alias for `make_superduperlattice` (CSL = Coincidence
+  Site Lattice, the smallest common superlattice of the input lattices).
+- Added `make_dscl` and alias `make_itsybitsylattice` to compute the Displacement
+  Shift Complete lattice (DSCL), the coarsest lattice whose point set contains
+  all points of the input lattices.
 
 
 ## [3.0a1] - 2026-03-02

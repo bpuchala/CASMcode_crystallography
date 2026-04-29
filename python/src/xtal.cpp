@@ -183,6 +183,18 @@ xtal::Lattice make_superduperlattice(std::vector<xtal::Lattice> lattices,
   }
 }
 
+xtal::Lattice make_itsybitsylattice(std::vector<xtal::Lattice> lattices) {
+  if (lattices.empty()) {
+    throw std::runtime_error(
+        "Error in make_itsybitsylattice: lattices must not be empty");
+  }
+  xtal::Lattice result = lattices[0];
+  for (size_t i = 1; i < lattices.size(); ++i) {
+    result = xtal::make_itsybitsylattice(result, lattices[i]);
+  }
+  return result;
+}
+
 // DoFSetBasis
 
 struct DoFSetBasis {
@@ -1784,7 +1796,10 @@ PYBIND11_MODULE(_xtal, m) {
   m.def("make_superduperlattice", &make_superduperlattice, py::arg("lattices"),
         py::arg("mode") = std::string("commensurate"),
         py::arg("point_group") = std::vector<xtal::SymOp>{}, R"pbdoc(
-      Returns the smallest lattice that is superlattice of the input lattices
+      Returns the coincident site lattice (CSL), the smallest lattice that is a
+      superlattice of the input lattices
+
+      This is an alias of :func:`make_csl`.
 
       Parameters
       ----------
@@ -1806,8 +1821,72 @@ PYBIND11_MODULE(_xtal, m) {
 
       Returns
       -------
-      superduperlattice : Lattice
-          The superduperlattice
+      cs_lattice : Lattice
+          The coincident site lattice (CSL).
+      )pbdoc");
+
+  m.def("make_csl", &make_superduperlattice, py::arg("lattices"),
+        py::arg("mode") = std::string("commensurate"),
+        py::arg("point_group") = std::vector<xtal::SymOp>{}, R"pbdoc(
+      Returns the coincident site lattice (CSL), the smallest lattice that is a
+      superlattice of the input lattices
+
+      Parameters
+      ----------
+
+      lattices : list[:class:`Lattice`]
+          List of lattices.
+
+      mode : str, default="commensurate"
+          One of:
+
+          - "commensurate": Returns the smallest possible superlattice of all input lattices
+          - "minimal_commensurate": Returns the lattice that is the smallest possible superlattice of an equivalent lattice to all input lattice
+          - "fully_commensurate": Returns the lattice that is a superlattice of all equivalents of
+            all input lattices
+
+      point_group : list[:class:`SymOp`], default=[]
+          Point group that generates the equivalent lattices for the the "minimal_commensurate" and
+          "fully_commensurate" modes.
+
+      Returns
+      -------
+      cs_lattice : Lattice
+          The coincident site lattice (CSL).
+      )pbdoc");
+
+  m.def("make_itsybitsylattice", &make_itsybitsylattice, py::arg("lattices"),
+        R"pbdoc(
+      Returns the displacement shift complete lattice (DSCL), the coarsest
+      lattice whose point set contains all points of the input lattices.
+
+      This is an alias of :func:`make_dscl`.
+
+      Parameters
+      ----------
+      lattices : list[:class:`Lattice`]
+          List of lattices.
+
+      Returns
+      -------
+      dsc_lattice : Lattice
+          The displacement shift complete lattice (DSCL).
+      )pbdoc");
+
+  m.def("make_dscl", &make_itsybitsylattice, py::arg("lattices"),
+        R"pbdoc(
+      Returns the displacement shift complete lattice (DSCL), the coarsest
+      lattice whose point set contains all points of the input lattices.
+
+      Parameters
+      ----------
+      lattices : list[:class:`Lattice`]
+          List of lattices.
+
+      Returns
+      -------
+      dsc_lattice : Lattice
+          The displacement shift complete lattice (DSCL).
       )pbdoc");
 
   py::class_<xtal::AtomPosition>(m, "AtomComponent", R"pbdoc(
@@ -2499,9 +2578,8 @@ PYBIND11_MODULE(_xtal, m) {
            A Prim is primitive if no proper subset of the basis sites can
            be used to generate the full crystal by translation alone.
            )pbdoc")
-      .def(
-          "primitive", &make_primitive_prim,
-          R"pbdoc(
+      .def("primitive", &make_primitive_prim,
+           R"pbdoc(
           Returns the primitive equivalent of this Prim.
 
           Equivalent to :func:`make_primitive_prim`.
@@ -2511,9 +2589,8 @@ PYBIND11_MODULE(_xtal, m) {
           prim : Prim
               The primitive equivalent Prim.
           )pbdoc")
-      .def(
-          "factor_group", &make_prim_factor_group,
-          R"pbdoc(
+      .def("factor_group", &make_prim_factor_group,
+           R"pbdoc(
           Returns the factor group.
 
           Equivalent to :func:`make_prim_factor_group`.
@@ -2525,9 +2602,8 @@ PYBIND11_MODULE(_xtal, m) {
               the primitive unit cell, that leave the lattice vectors, basis
               site coordinates, and all DoF invariant.
           )pbdoc")
-      .def(
-          "crystal_point_group", &make_prim_crystal_point_group,
-          R"pbdoc(
+      .def("crystal_point_group", &make_prim_crystal_point_group,
+           R"pbdoc(
           Returns the crystal point group.
 
           Equivalent to :func:`make_prim_crystal_point_group`.
