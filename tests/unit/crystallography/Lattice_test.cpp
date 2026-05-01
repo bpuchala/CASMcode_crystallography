@@ -5,6 +5,8 @@
 #include "casm/crystallography/LatticeIsEquivalent.hh"
 
 /// What is being used to test it:
+#include "casm/casm_io/container/json_io.hh"
+#include "casm/casm_io/json/jsonParser.hh"
 #include "casm/crystallography/Molecule.hh"
 #include "casm/crystallography/SuperlatticeEnumerator.hh"
 #include "casm/crystallography/SymTools.hh"
@@ -130,5 +132,37 @@ TEST(LatticeTest, ReducedCellTest) {
     EXPECT_TRUE(almost_zero(lattice.lat_column_mat()(2, 2), tol));
     // std::cout << "imperfect reduced_cell: \n"
     //           << lattice.reduced_cell().lat_column_mat() << std::endl;
+  }
+}
+
+// Replicates the code path used by the Python xtal.Lattice.to_dict /
+// xtal.Lattice.from_dict bindings in xtal.cpp so that failures can be
+// debugged at the C++ level without pybind11 in the loop.
+TEST(LatticeTest, JsonRoundtripTest) {
+  double tol = TOL;
+
+  for (Lattice const &lat : {Lattice::fcc(), Lattice::bcc(), Lattice::cubic(),
+                             Lattice::hexagonal()}) {
+    // --- to_dict equivalent ---
+    jsonParser json_out;
+    std::cout << "here 1" << std::endl;
+    json_out["lattice_vectors"] = lat.lat_column_mat().transpose();
+    // upcast to nlohmann::json as the binding does
+    std::cout << "here 2" << std::endl;
+    nlohmann::json data = json_out;
+
+    // --- from_dict equivalent ---
+    std::cout << "here 3" << std::endl;
+    jsonParser json{data};
+    std::cout << "here 4" << std::endl;
+    Eigen::Matrix3d latvec_transpose;
+    std::cout << "here 5" << std::endl;
+    ASSERT_NO_THROW(from_json(latvec_transpose, json["lattice_vectors"]));
+    std::cout << "here 6" << std::endl;
+    Lattice roundtrip(latvec_transpose.transpose(), tol);
+
+    std::cout << "here 7" << std::endl;
+    EXPECT_TRUE(xtal::is_equivalent(lat, roundtrip));
+    std::cout << "here 8" << std::endl;
   }
 }

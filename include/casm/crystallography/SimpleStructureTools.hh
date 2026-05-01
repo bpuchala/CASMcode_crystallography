@@ -8,6 +8,7 @@
 
 #include "casm/crystallography/DoFDecl.hh"
 #include "casm/crystallography/SymType.hh"
+#include "casm/crystallography/UnitCellCoord.hh"
 #include "casm/external/Eigen/Dense"
 #include "casm/global/definitions.hh"
 
@@ -110,6 +111,21 @@ bool is_equivalent(SimpleStructure const &first, SimpleStructure const &second,
                    double xtal_tol = TOL,
                    std::map<std::string, double> properties_tol =
                        std::map<std::string, double>());
+
+/// \brief Find all sites within cutoff of any phenomenal site
+///
+/// \param structure The structure
+/// \param phenomenal_sites Sites relative to which the neighborhood is
+///     computed. The sublattice index is the atom index in the reference
+///     cell; (i,j,k) are unit-cell offsets.
+/// \param cutoff Maximum distance for including a site
+/// \param include_phenomenal_sites If true, phenomenal sites are included in
+///     the result; if false, they are excluded
+/// \returns UnitCellCoord for each atom within cutoff of any phenomenal site
+std::vector<UnitCellCoord> make_neighborhood(
+    SimpleStructure const &structure,
+    std::vector<UnitCellCoord> const &phenomenal_sites, double cutoff,
+    bool include_phenomenal_sites);
 
 /** @} */
 }  // namespace xtal

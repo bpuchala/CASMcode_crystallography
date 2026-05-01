@@ -611,5 +611,65 @@ bool is_equivalent(const SimpleStructure &first, const SimpleStructure &second,
   return true;
 }
 
+std::vector<UnitCellCoord> make_neighborhood(
+    SimpleStructure const &structure,
+    std::vector<UnitCellCoord> const &phenomenal_sites, double cutoff,
+    bool include_phenomenal_sites) {
+  Lattice lat(structure.lat_column_mat);
+  Eigen::Vector3i dim = lat.enclose_sphere(cutoff);
+  Index n_atoms = structure.atom_info.size();
+
+  // Extend grid to cover all phenomenal sites plus the cutoff sphere around
+  // each
+  Eigen::Vector3i low = -dim;
+  Eigen::Vector3i high = dim;
+  for (auto const &uc : phenomenal_sites) {
+    Eigen::Vector3i v = uc.unitcell().cast<int>();
+    low = low.cwiseMin(v - dim);
+    high = high.cwiseMax(v + dim);
+  }
+
+  // Precompute Cartesian positions of phenomenal sites
+  std::vector<Eigen::Vector3d> phenomenal_cart;
+  for (auto const &uc : phenomenal_sites) {
+    Eigen::Vector3d shift =
+        structure.lat_column_mat * uc.unitcell().cast<double>();
+    phenomenal_cart.push_back(structure.atom_info.coords.col(uc.sublattice()) +
+                              shift);
+  }
+
+  std::vector<UnitCellCoord> result;
+  for (int i = low[0]; i <= high[0]; ++i) {
+    for (int j = low[1]; j <= high[1]; ++j) {
+      for (int k = low[2]; k <= high[2]; ++k) {
+        Eigen::Vector3d lat_shift =
+            structure.lat_column_mat * Eigen::Vector3d(i, j, k);
+
+        for (Index b = 0; b < n_atoms; ++b) {
+          UnitCellCoord test_uc(b, UnitCell(i, j, k));
+
+          if (!include_phenomenal_sites) {
+            bool is_phenom = std::any_of(
+                phenomenal_sites.begin(), phenomenal_sites.end(),
+                [&](UnitCellCoord const &p) { return test_uc == p; });
+            if (is_phenom) continue;
+          }
+
+          Eigen::Vector3d test_cart =
+              structure.atom_info.coords.col(b) + lat_shift;
+          bool within_cutoff =
+              std::any_of(phenomenal_cart.begin(), phenomenal_cart.end(),
+                          [&](Eigen::Vector3d const &pc) {
+                            return (test_cart - pc).norm() < cutoff;
+                          });
+
+          if (within_cutoff) result.emplace_back(test_uc);
+        }
+      }
+    }
+  }
+  return result;
+}
+
 }  // namespace xtal
 }  // namespace CASM
