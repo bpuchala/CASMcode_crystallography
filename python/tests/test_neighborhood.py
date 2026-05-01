@@ -237,3 +237,165 @@ def test_list_site_two_adjacent_include():
     assert make_site(0, 0, 0, 0) in nbrs
     assert make_site(0, 1, 0, 0) in nbrs
     assert len(nbrs) == 12  # 10 non-phenomenal + 2 phenomenal
+
+
+# =============================================================================
+# Prim.neighborhood tests
+# =============================================================================
+
+
+def make_simple_cubic_prim(a=1.0):
+    lat = xtal.Lattice(np.diag([a, a, a]))
+    return xtal.Prim(
+        lattice=lat,
+        coordinate_frac=np.zeros((3, 1)),
+        occ_dof=[["A"]],
+    )
+
+
+def make_bcc_prim(a=2.0):
+    """BCC conventional cell as Prim: 2 sites at (0,0,0) and (0.5,0.5,0.5)."""
+    lat = xtal.Lattice(np.diag([a, a, a]))
+    return xtal.Prim(
+        lattice=lat,
+        coordinate_frac=np.array([[0, 0, 0], [0.5, 0.5, 0.5]]).T,
+        occ_dof=[["A"], ["A"]],
+    )
+
+
+def make_fcc_prim(a=4.0):
+    lat = xtal.Lattice(
+        np.array([[0, a / 2, a / 2], [a / 2, 0, a / 2], [a / 2, a / 2, 0]]).T
+    )
+    return xtal.Prim(
+        lattice=lat,
+        coordinate_frac=np.zeros((3, 1)),
+        occ_dof=[["A"]],
+    )
+
+
+def prim_site_cart(prim, n):
+    L = prim.lattice().column_vector_matrix()
+    frac = prim.coordinate_frac()[:, n.sublattice()]
+    return L @ (frac + np.array(n.unitcell(), dtype=float))
+
+
+def prim_distances(prim, sites):
+    return sorted(np.linalg.norm(prim_site_cart(prim, n)) for n in sites)
+
+
+# --- Prim.neighborhood: phenomenal_sites=None ---
+
+
+def test_prim_none_includes_origin_sites():
+    """Prim.neighborhood: phenomenal_sites=None includes all origin unit cell sites."""
+    p = make_simple_cubic_prim(a=1.0)
+    nbrs = p.neighborhood(1.1)
+    assert make_site(0, 0, 0, 0) in nbrs
+
+
+def test_prim_none_simple_cubic_count():
+    """Prim.neighborhood: 6 NN + self at cutoff=1.1 for simple cubic a=1."""
+    p = make_simple_cubic_prim(a=1.0)
+    nbrs = p.neighborhood(1.1)
+    assert len(nbrs) == 7
+
+
+def test_prim_none_simple_cubic_distances():
+    """Prim.neighborhood: two unique distances (0 and 1.0) at cutoff=1.1."""
+    p = make_simple_cubic_prim(a=1.0)
+    nbrs = p.neighborhood(1.1)
+    dists = prim_distances(p, nbrs)
+    assert all(d < 1.1 for d in dists)
+    assert dists[0] == pytest.approx(0.0)
+    assert all(pytest.approx(1.0) == d for d in dists[1:])
+
+
+def test_prim_none_fcc():
+    """Prim.neighborhood: 12 FCC NN + self at cutoff just below 2nd shell."""
+    p = make_fcc_prim(a=4.0)
+    first_shell = 4.0 / math.sqrt(2)
+    nbrs = p.neighborhood(3.5)
+    assert len(nbrs) == 13
+    dists = prim_distances(p, nbrs)
+    unique = sorted({round(d, 6) for d in dists})
+    assert len(unique) == 2
+    assert unique[0] == pytest.approx(0.0)
+    assert unique[1] == pytest.approx(first_shell, rel=1e-5)
+
+
+def test_prim_none_bcc_both_origin_sites_included():
+    """Prim.neighborhood: phenomenal_sites=None with 2-site basis includes both."""
+    p = make_bcc_prim(a=2.0)
+    nbrs = p.neighborhood(2.0)
+    assert make_site(0, 0, 0, 0) in nbrs
+    assert make_site(1, 0, 0, 0) in nbrs
+
+
+# --- Prim.neighborhood: phenomenal_sites as int ---
+
+
+def test_prim_int_exclude_phenomenal():
+    """Prim.neighborhood: phenomenal_sites=int, exclude: origin site not in result."""
+    p = make_simple_cubic_prim(a=1.0)
+    nbrs = p.neighborhood(1.1, phenomenal_sites=0, include_phenomenal_sites=False)
+    assert len(nbrs) == 6
+    assert make_site(0, 0, 0, 0) not in nbrs
+
+
+def test_prim_int_include_phenomenal():
+    """Prim.neighborhood: phenomenal_sites=int, include: origin site in result."""
+    p = make_simple_cubic_prim(a=1.0)
+    nbrs = p.neighborhood(1.1, phenomenal_sites=0, include_phenomenal_sites=True)
+    assert len(nbrs) == 7
+    assert make_site(0, 0, 0, 0) in nbrs
+
+
+# --- Prim.neighborhood: input type consistency ---
+
+
+def test_prim_list_int_same_as_int():
+    """Prim.neighborhood: [int] gives same result as int."""
+    p = make_simple_cubic_prim(a=1.0)
+    assert as_tuples(p.neighborhood(1.1, phenomenal_sites=0)) == as_tuples(
+        p.neighborhood(1.1, phenomenal_sites=[0])
+    )
+
+
+def test_prim_site_same_as_int():
+    """Prim.neighborhood: IntegralSiteCoordinate at origin same as int=0."""
+    p = make_simple_cubic_prim(a=1.0)
+    assert as_tuples(p.neighborhood(1.1, phenomenal_sites=0)) == as_tuples(
+        p.neighborhood(1.1, phenomenal_sites=make_site(0, 0, 0, 0))
+    )
+
+
+def test_prim_site_off_origin():
+    """Prim.neighborhood: off-origin phenomenal gives correct neighbors."""
+    p = make_simple_cubic_prim(a=1.0)
+    phenom = make_site(0, 1, 0, 0)
+    nbrs = p.neighborhood(1.1, phenomenal_sites=phenom, include_phenomenal_sites=False)
+    expected = {
+        (0, 0, 0, 0),
+        (0, 2, 0, 0),
+        (0, 1, 1, 0),
+        (0, 1, -1, 0),
+        (0, 1, 0, 1),
+        (0, 1, 0, -1),
+    }
+    assert as_tuples(nbrs) == expected
+
+
+# --- Prim.neighborhood matches Structure.neighborhood for equivalent structures ---
+
+
+def test_prim_matches_structure_neighborhood():
+    """Prim.neighborhood and Structure.neighborhood agree for equivalent inputs."""
+    a = 1.0
+    p = make_simple_cubic_prim(a)
+    s = make_simple_cubic(a)
+    for cutoff in [1.1, 2.5]:
+        assert as_tuples(p.neighborhood(cutoff)) == as_tuples(s.neighborhood(cutoff))
+        assert as_tuples(p.neighborhood(cutoff, phenomenal_sites=0)) == as_tuples(
+            s.neighborhood(cutoff, phenomenal_sites=0)
+        )

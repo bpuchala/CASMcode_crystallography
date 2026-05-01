@@ -2800,6 +2800,76 @@ PYBIND11_MODULE(_xtal, m) {
           -------
           prim : Prim
                 A Prim
+          )pbdoc")
+      .def(
+          "neighborhood",
+          [](std::shared_ptr<xtal::BasicStructure const> const &self,
+             double cutoff, py::object phenomenal_sites,
+             bool include_phenomenal_sites) {
+            Index n_basis = self->basis().size();
+            std::vector<xtal::UnitCellCoord> phenom;
+
+            if (phenomenal_sites.is_none()) {
+              for (Index b = 0; b < n_basis; ++b)
+                phenom.emplace_back(b, xtal::UnitCell(0, 0, 0));
+              include_phenomenal_sites = true;
+            } else if (py::isinstance<py::int_>(phenomenal_sites)) {
+              phenom.emplace_back(phenomenal_sites.cast<Index>(),
+                                  xtal::UnitCell(0, 0, 0));
+            } else if (py::isinstance<xtal::UnitCellCoord>(phenomenal_sites)) {
+              phenom.push_back(phenomenal_sites.cast<xtal::UnitCellCoord>());
+            } else {
+              for (auto item : phenomenal_sites.cast<py::iterable>()) {
+                if (py::isinstance<py::int_>(item))
+                  phenom.emplace_back(item.cast<Index>(),
+                                      xtal::UnitCell(0, 0, 0));
+                else
+                  phenom.push_back(item.cast<xtal::UnitCellCoord>());
+              }
+            }
+
+            return xtal::make_neighborhood(*self, phenom, cutoff,
+                                           include_phenomenal_sites);
+          },
+          py::arg("cutoff"), py::arg("phenomenal_sites") = py::none(),
+          py::arg("include_phenomenal_sites") = false,
+          R"pbdoc(
+          Find all sites within cutoff of any phenomenal site
+
+          For a periodic structure, iterates over all basis site images and
+          collects those within ``cutoff`` of any phenomenal site. Each result
+          is an :class:`IntegralSiteCoordinate` whose sublattice index is the
+          basis site index and whose ``(i, j, k)`` are unit cell offsets.
+
+          Parameters
+          ----------
+          cutoff : float
+              Maximum Cartesian distance for including a site.
+          phenomenal_sites : None | int | list[int] | IntegralSiteCoordinate | list[IntegralSiteCoordinate], optional
+              Sites relative to which the neighborhood is computed.
+
+              - ``None`` (default): use all sites in the origin unit cell. See
+                Returns for how this affects the result.
+              - ``int`` or ``list[int]``: basis site index or indices in the
+                origin unit cell, i.e. ``IntegralSiteCoordinate(b, 0, 0, 0)``.
+              - :class:`IntegralSiteCoordinate` or
+                ``list[IntegralSiteCoordinate]``: explicit site(s), which may
+                be in any unit cell.
+          include_phenomenal_sites : bool, default=False
+              When ``phenomenal_sites`` is not ``None``, controls whether the
+              phenomenal sites themselves are included in the result. Ignored
+              when ``phenomenal_sites`` is ``None``.
+
+          Returns
+          -------
+          neighbors : list[IntegralSiteCoordinate]
+              When ``phenomenal_sites`` is ``None``: all sites (including origin
+              unit cell sites) within ``cutoff`` of any site in the origin unit
+              cell.
+
+              When ``phenomenal_sites`` is provided: all sites within ``cutoff``
+              of any phenomenal site, with the phenomenal sites themselves
+              included or excluded according to ``include_phenomenal_sites``.
           )pbdoc");
 
   m.def("_is_same_prim", &is_same_prim, py::arg("first"), py::arg("second"),

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "casm/crystallography/Lattice.hh"
+#include "casm/crystallography/UnitCellCoord.hh"
 #include "casm/external/Eigen/Core"
 #include "casm/global/definitions.hh"
 #include "casm/global/eigen.hh"
@@ -101,6 +102,21 @@ template <typename IntegralType, int Options = 0>
 BasicStructure make_superstructure(
     const BasicStructure &tiling_unit,
     const Eigen::Matrix<IntegralType, 3, 3, Options> &transformation_matrix);
+
+/// \brief Find all sites within cutoff of any phenomenal site
+///
+/// \param prim The primitive structure
+/// \param phenomenal_sites Sites relative to which the neighborhood is
+///     computed. The sublattice index is the basis site index; (i,j,k) are
+///     unit-cell offsets.
+/// \param cutoff Maximum distance for including a site
+/// \param include_phenomenal_sites If true, phenomenal sites are included in
+///     the result; if false, they are excluded
+/// \returns UnitCellCoord for each site within cutoff of any phenomenal site
+std::vector<UnitCellCoord> make_neighborhood(
+    BasicStructure const &prim,
+    std::vector<UnitCellCoord> const &phenomenal_sites, double cutoff,
+    bool include_phenomenal_sites);
 
 }  // namespace xtal
 }  // namespace CASM

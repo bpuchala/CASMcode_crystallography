@@ -28,7 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `make_dscl` and alias `make_itsybitsylattice` to compute the Displacement
   Shift Complete lattice (DSCL), the coarsest lattice whose point set contains
   all points of the input lattices.
-- Added `Structure.neighborhood(cutoff, phenomenal_sites, include_phenomenal_sites)`
+- Added `Structure.neighborhood` and `Prim.neighborhood` with signature
+  ``neighborhood(cutoff, phenomenal_sites=None, include_phenomenal_sites=False)``
   to find neighboring sites. When ``phenomenal_sites`` is ``None``, returns all
   sites within ``cutoff`` of any site in the origin unit cell (origin sites
   always included). When ``phenomenal_sites`` is provided (int, list[int],
