@@ -23,6 +23,7 @@ SymInfo::SymInfo(SymOp const &op, xtal::Lattice const &lat)
     angle = 0;
     op_type = symmetry_type::identity_op;
     _axis = Eigen::Vector3d::Zero();
+    _screw_glide_shift = Eigen::Vector3d::Zero();
     _location = Eigen::Vector3d::Zero();
     _set(_axis, _screw_glide_shift, _location, lattice);
     return;
@@ -33,6 +34,7 @@ SymInfo::SymInfo(SymOp const &op, xtal::Lattice const &lat)
     angle = 0;
     op_type = symmetry_type::inversion_op;
     _axis = Eigen::Vector3d::Zero();
+    _screw_glide_shift = Eigen::Vector3d::Zero();
     _location = tau / 2.;
     _set(_axis, _screw_glide_shift, _location, lattice);
     return;

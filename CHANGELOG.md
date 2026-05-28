@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Removed dead `std::is_floating_point` specializations for `Coordinate` proxy
   types that broke builds with updated macOS Command Line Tools (`libc++`).
+- Fixed `SymInfo` to initialize `_screw_glide_shift` to zero for identity and
+  inversion operations (previously left uninitialized).
 
 ### Added
 
@@ -28,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `make_dscl` and alias `make_itsybitsylattice` to compute the Displacement
   Shift Complete lattice (DSCL), the coarsest lattice whose point set contains
   all points of the input lattices.
+- Added lattice-free symmetry operation geometry methods to `SymOp`:
+  `op_type()`, `axis()`, `angle()`, `screw_glide_shift()`, and `location()`.
+  Unlike `SymInfo`, these do not require a lattice, but cannot distinguish
+  rotation from screw or mirror from glide operations (both are reported as
+  `"rotation_or_screw"` or `"mirror_or_glide"`).
 - Added `Structure.neighborhood` and `Prim.neighborhood` with signature
   ``neighborhood(cutoff, phenomenal_sites=None, include_phenomenal_sites=False)``
   to find neighboring sites. When ``phenomenal_sites`` is ``None``, returns all

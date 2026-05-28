@@ -801,6 +801,97 @@ std::string get_syminfo_brief_frac(xtal::SymInfo const &syminfo) {
   return to_brief_unicode(syminfo, xtal::SymInfoOptions(FRAC));
 }
 
+// Lattice-free SymOp geometry analysis
+
+struct SymOpGeometry {
+  std::string op_type;  // "identity", "inversion", "rotoinversion",
+                        // "rotation_or_screw", "mirror_or_glide", "invalid"
+  Eigen::Vector3d axis;
+  double angle;
+  Eigen::Vector3d screw_glide_shift;
+  Eigen::Vector3d location;
+};
+
+SymOpGeometry symop_geometry(xtal::SymOp const &op) {
+  SymOpGeometry result;
+  result.axis = Eigen::Vector3d::Zero();
+  result.screw_glide_shift = Eigen::Vector3d::Zero();
+  result.location = Eigen::Vector3d::Zero();
+  result.angle = 0.0;
+
+  auto const &matrix = op.matrix;
+  auto const &tau = op.translation;
+
+  if (almost_equal(matrix.trace(), 3.)) {
+    result.op_type = "identity";
+    return result;
+  }
+
+  if (almost_equal(matrix.trace(), -3.)) {
+    result.op_type = "inversion";
+    result.location = tau / 2.;
+    return result;
+  }
+
+  int det = static_cast<int>(std::round(matrix.determinant()));
+  Eigen::EigenSolver<Eigen::Matrix3d> t_eig(det * matrix);
+
+  Eigen::Vector3d _axis = Eigen::Vector3d::Zero();
+  bool found = false;
+  for (int i = 0; i < 3; i++) {
+    if (almost_equal(t_eig.eigenvalues()(i), std::complex<double>(1, 0))) {
+      _axis = t_eig.eigenvectors().col(i).real();
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    result.op_type = "invalid";
+    return result;
+  }
+
+  for (int i = 0; i < 3; i++) {
+    if (!almost_zero(_axis[i])) {
+      _axis *= float_sgn(_axis[i]);
+      break;
+    }
+  }
+
+  Eigen::Vector3d ortho = _axis.unitOrthogonal();
+  Eigen::Vector3d rot = det * (matrix * ortho);
+  double angle = fmod(
+      (180. / M_PI) * atan2(_axis.dot(ortho.cross(rot)), ortho.dot(rot)) + 360.,
+      360.);
+
+  result.axis = _axis;
+  result.angle = angle;
+
+  if (det < 0) {
+    if (almost_equal(angle, 180.)) {
+      result.op_type = "mirror_or_glide";
+      result.screw_glide_shift = tau - tau.dot(_axis) * _axis;
+      result.location = tau.dot(_axis) * _axis / 2.;
+    } else {
+      result.op_type = "rotoinversion";
+      result.screw_glide_shift = tau.dot(_axis) * _axis;
+      result.location = (Eigen::Matrix3d::Identity() - matrix).inverse() * tau;
+    }
+  } else {
+    result.op_type = "rotation_or_screw";
+    result.screw_glide_shift = tau.dot(_axis) * _axis;
+    Eigen::MatrixXd tmat(3, 2);
+    tmat << ortho, ortho.cross(_axis);
+    result.location =
+        tmat *
+        (Eigen::MatrixXd::Identity(2, 2) - tmat.transpose() * matrix * tmat)
+            .inverse() *
+        tmat.transpose() * tau;
+  }
+
+  return result;
+}
+
 xtal::SimpleStructure make_simplestructure(
     xtal::Lattice const &lattice,
     Eigen::MatrixXd const &atom_coordinate_frac = Eigen::MatrixXd(),
@@ -3226,6 +3317,99 @@ PYBIND11_MODULE(_xtal, m) {
           "symmetry/SymGroup/"
           "#coordinate-transformation-representation-json-object>`_ documents "
           "the format.");
+
+  pySymOp
+      .def(
+          "op_type",
+          [](xtal::SymOp const &op) { return symop_geometry(op).op_type; },
+          R"pbdoc(
+          Returns the symmetry operation type.
+
+          Returns
+          -------
+          op_type : str
+              One of:
+
+              - "identity"
+              - "inversion"
+              - "rotoinversion"
+              - "rotation_or_screw"
+              - "mirror_or_glide"
+              - "invalid"
+
+              .. note::
+
+                  This method cannot distinguish rotation from screw operations,
+                  or mirror from glide operations, because that distinction
+                  requires knowing whether the translation component is a lattice
+                  vector. Use :class:`SymInfo` with a :class:`Lattice` to obtain
+                  the full classification.
+          )pbdoc")
+      .def(
+          "axis", [](xtal::SymOp const &op) { return symop_geometry(op).axis; },
+          R"pbdoc(
+          Returns the symmetry operation axis, in Cartesian coordinates.
+
+          Returns
+          -------
+          axis : numpy.ndarray[numpy.float64[3, 1]]
+              This is:
+
+              - the rotation axis, if the operation is a rotation or screw operation
+              - the rotation axis of inversion * self, if this is an improper
+                rotation (then the axis is a normal vector for a mirror plane)
+              - zero vector, if the operation is identity or inversion
+
+              The axis is normalized to length 1.
+          )pbdoc")
+      .def(
+          "angle",
+          [](xtal::SymOp const &op) { return symop_geometry(op).angle; },
+          R"pbdoc(
+          Returns the symmetry operation angle, in degrees.
+
+          Returns
+          -------
+          angle : float
+              This is:
+
+              - the rotation angle, if the operation is a rotation or screw
+                operation
+              - the rotation angle of inversion * self, if this is an improper
+                rotation
+              - zero, if the operation is identity or inversion
+          )pbdoc")
+      .def(
+          "screw_glide_shift",
+          [](xtal::SymOp const &op) {
+            return symop_geometry(op).screw_glide_shift;
+          },
+          R"pbdoc(
+          Returns the screw or glide translation component, in Cartesian
+          coordinates.
+
+          Returns
+          -------
+          screw_glide_shift : numpy.ndarray[numpy.float64[3, 1]]
+              This is:
+
+              - the component of translation parallel to `axis`, if the
+                operation is a rotation or screw operation
+              - the component of translation perpendicular to `axis`, if
+                the operation is a mirror or glide operation
+          )pbdoc")
+      .def(
+          "location",
+          [](xtal::SymOp const &op) { return symop_geometry(op).location; },
+          R"pbdoc(
+          Returns a Cartesian coordinate that is invariant to the operation.
+
+          Returns
+          -------
+          location : numpy.ndarray[numpy.float64[3, 1]]
+              The invariant point in Cartesian coordinates. This does not exist
+              for the identity operation.
+          )pbdoc");
 
   py::class_<xtal::SymInfo>(m, "SymInfo", R"pbdoc(
       Symmetry operation type, axis, invariant point, etc.

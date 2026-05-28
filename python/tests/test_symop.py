@@ -1,6 +1,7 @@
 import numpy as np
 
 import libcasm.xtal as xtal
+import libcasm.xtal.prims as xtal_prims
 
 
 def test_SymOp_constructor():
@@ -271,3 +272,75 @@ def test_SymOp_mul_structure(example_structure_1):
     assert np.allclose(
         transformed_structure.global_properties()["Hstrain"], expected_Hstrain
     )
+
+
+def test_SymOp_geometry_identity():
+    op = xtal.SymOp(np.eye(3), np.zeros(3), False)
+    assert op.op_type() == "identity"
+    assert np.allclose(op.axis(), np.zeros(3))
+    assert op.angle() == 0.0
+    assert np.allclose(op.screw_glide_shift(), np.zeros(3))
+    assert np.allclose(op.location(), np.zeros(3))
+
+
+def test_SymOp_geometry_inversion():
+    op = xtal.SymOp(-np.eye(3), np.zeros(3), False)
+    assert op.op_type() == "inversion"
+    assert np.allclose(op.axis(), np.zeros(3))
+    assert op.angle() == 0.0
+    assert np.allclose(op.location(), np.zeros(3))
+
+
+def test_SymOp_geometry_from_factor_group():
+    # BCC has 48 operations: identity, inversions, rotations/screws, mirrors/glides,
+    # rotoinversions
+    xtal_prim = xtal_prims.BCC(r=1.0, occ_dof=["A"])
+    factor_group = xtal.make_factor_group(xtal_prim)
+
+    op_types = set(op.op_type() for op in factor_group)
+    # BCC point group Oh has proper rotations, improper rotations — all point ops
+    # so we expect rotation_or_screw and mirror_or_glide (and identity, inversion,
+    # rotoinversion)
+    assert "identity" in op_types
+    assert "inversion" in op_types
+    assert "rotation_or_screw" in op_types
+    assert "mirror_or_glide" in op_types
+    assert "rotoinversion" in op_types
+
+    # Every op should have a valid op_type
+    valid_types = {
+        "identity",
+        "inversion",
+        "rotoinversion",
+        "rotation_or_screw",
+        "mirror_or_glide",
+        "invalid",
+    }
+    for op in factor_group:
+        assert op.op_type() in valid_types
+
+    # SymInfo should agree on type for all ops (using coarser classification)
+    type_map = {
+        "identity": "identity",
+        "inversion": "inversion",
+        "rotoinversion": "rotoinversion",
+        "rotation": "rotation_or_screw",
+        "screw": "rotation_or_screw",
+        "mirror": "mirror_or_glide",
+        "glide": "mirror_or_glide",
+    }
+    lattice = xtal_prim.lattice()
+    for op in factor_group:
+        syminfo = xtal.SymInfo(op, lattice)
+        expected = type_map[syminfo.op_type()]
+        assert op.op_type() == expected
+
+    # axis, angle, screw_glide_shift, location should match SymInfo for all ops
+    for op in factor_group:
+        syminfo = xtal.SymInfo(op, lattice)
+        assert np.allclose(op.axis(), syminfo.axis(), atol=1e-10)
+        assert abs(op.angle() - syminfo.angle()) < 1e-10
+        assert np.allclose(
+            op.screw_glide_shift(), syminfo.screw_glide_shift(), atol=1e-10
+        )
+        assert np.allclose(op.location(), syminfo.location(), atol=1e-10)
