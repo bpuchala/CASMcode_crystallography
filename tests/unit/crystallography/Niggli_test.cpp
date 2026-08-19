@@ -1,5 +1,7 @@
 #include "gtest/gtest.h"
 
+#include <algorithm>
+
 /// What is being tested:
 #include "casm/crystallography/CanonicalForm.hh"
 #include "casm/crystallography/Niggli.hh"
@@ -236,4 +238,43 @@ TEST(NiggliTest, ImperfectSymmetryTest1) {
 
     i += 1;
   }
+}
+
+TEST(NiggliTest, EquivalentLatticesTest) {
+  using namespace CASM;
+  using namespace CASM::xtal;
+
+  double tol = TOL;
+  BasicStructure prim(test::FCC_binary_prim());
+  std::vector<SymOp> fg = make_factor_group(prim);
+  std::vector<SymOp> pg;
+  for (auto const &symop : fg) {
+    pg.push_back(SymOp::point_operation(symop.matrix));
+  }
+  // FCC_binary_prim has a single basis site, so its crystal point group is
+  // the full cubic point group (48 operations).
+  EXPECT_EQ(pg.size(), 48);
+
+  // A low-symmetry supercell: orbit under the 48-element point group has 12
+  // distinct members (invariant subgroup has 4 elements).
+  Eigen::Matrix3i T_low_sym;
+  T_low_sym << 1, 0, 0, 0, 2, 0, 0, 0, 3;
+  Lattice low_sym_superlat = make_superlattice(prim.lattice(), T_low_sym);
+  std::vector<Lattice> low_sym_equivs =
+      canonical::equivalents(low_sym_superlat, pg, tol);
+  EXPECT_EQ(low_sym_equivs.size(), 12);
+
+  // The canonical form must be among its own equivalents.
+  Lattice low_sym_canonical = canonical::equivalent(low_sym_superlat, pg, tol);
+  EXPECT_NE(std::find(low_sym_equivs.begin(), low_sym_equivs.end(),
+                      low_sym_canonical),
+            low_sym_equivs.end());
+
+  // A maximally-symmetric supercell (T = n * I) is invariant under every
+  // operation of the point group -- a single-element orbit.
+  Eigen::Matrix3i T_high_sym = 3 * Eigen::Matrix3i::Identity();
+  Lattice high_sym_superlat = make_superlattice(prim.lattice(), T_high_sym);
+  std::vector<Lattice> high_sym_equivs =
+      canonical::equivalents(high_sym_superlat, pg, tol);
+  EXPECT_EQ(high_sym_equivs.size(), 1);
 }

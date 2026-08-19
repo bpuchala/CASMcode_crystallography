@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   :class:`~libcasm.xtal.IntegralSiteCoordinate`, or a list thereof), returns
   all sites within ``cutoff`` of any phenomenal site, with the phenomenal sites
   themselves included or excluded according to ``include_phenomenal_sites``.
+- Added `make_equivalent_lattices`, to enumerate the distinct lattices
+  equivalent to a given lattice under a point group.
+- Extended `make_canonical_lattice` to accept optional `point_group` and
+  `tol` arguments, so it can be used to canonicalize a supercell lattice
+  under a prim's crystal point group (previously only the lattice's own
+  point group was usable).
 
 
 ## [3.0a1] - 2026-03-02

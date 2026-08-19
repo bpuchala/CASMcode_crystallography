@@ -58,9 +58,24 @@ double default_tol() { return TOL; }
 
 // Lattice
 
-xtal::Lattice make_canonical_lattice(xtal::Lattice lattice) {
+xtal::Lattice make_canonical_lattice(
+    xtal::Lattice lattice,
+    std::optional<std::vector<xtal::SymOp>> point_group = std::nullopt,
+    std::optional<double> tol = std::nullopt) {
   lattice.make_right_handed();
-  return xtal::canonical::equivalent(lattice);
+  double _tol = tol.has_value() ? *tol : lattice.tol();
+  std::vector<xtal::SymOp> _point_group =
+      point_group.has_value() ? *point_group
+                              : xtal::make_point_group(lattice, _tol);
+  return xtal::canonical::equivalent(lattice, _point_group, _tol);
+}
+
+std::vector<xtal::Lattice> make_equivalent_lattices(
+    xtal::Lattice lattice, std::vector<xtal::SymOp> point_group,
+    std::optional<double> tol = std::nullopt) {
+  lattice.make_right_handed();
+  double _tol = tol.has_value() ? *tol : lattice.tol();
+  return xtal::canonical::equivalents(lattice, point_group, _tol);
 }
 
 /// \brief Convert fractional coordinates to Cartesian coordinates
@@ -1633,22 +1648,23 @@ PYBIND11_MODULE(_xtal, m) {
           )pbdoc");
 
   m.def("make_canonical_lattice", &make_canonical_lattice,
-        py::arg("init_lattice"),
+        py::arg("init_lattice"), py::arg("point_group") = std::nullopt,
+        py::arg("tol") = std::nullopt,
         R"pbdoc(
     Returns the canonical equivalent lattice
 
     Finds the canonical right-handed Niggli cell of the lattice, applying
-    lattice point group operations to find the equivalent lattice in a
-    standardized orientation. The canonical orientation prefers lattice
-    vectors that form symmetric matrices with large positive values on the
-    diagonal and small values off the diagonal. See also `Lattice Canonical
-    Form`_.
+    point group operations to find the equivalent lattice in a standardized
+    orientation. The canonical orientation prefers lattice vectors that form
+    symmetric matrices with large positive values on the diagonal and small
+    values off the diagonal. See also `Lattice Canonical Form`_.
 
     Notes
     -----
-    The returned lattice is not canonical in the context of Prim supercell
-    lattices, in which case the crystal point group must be used in
-    determining the canonical orientation of the supercell lattice.
+    By default, the lattice's own point group is used. For a supercell
+    lattice of a Prim that has a basis, the crystal point group must be used to
+    determine the canonical orientation of the supercell lattice. The crystal
+    point group can be obtained using :func:`make_prim_crystal_point_group`.
 
     .. _`Lattice Canonical Form`: https://prisms-center.github.io/CASMcode_docs/formats/lattice_canonical_form/
 
@@ -1656,15 +1672,57 @@ PYBIND11_MODULE(_xtal, m) {
     ----------
     init_lattice : Lattice
         The initial lattice.
+    point_group : Optional[list[:class:`SymOp`]] = None
+        The point group used to find the canonical orientation. Default is
+        the lattice's own point group (:func:`make_point_group`). Use
+        the crystal point group (:func:`make_prim_crystal_point_group`) to
+        find the canonical orientation for a supercell of a Prim.
+    tol : Optional[float] = None
+        Tolerance used for comparison. Default is `init_lattice.tol()`.
 
     Returns
     -------
     lattice : Lattice
-        The canonical equivalent lattice, using the lattice point group.
+        The canonical equivalent lattice, using `point_group`.
     )pbdoc");
 
   m.def("make_canonical", &make_canonical_lattice, py::arg("init_lattice"),
+        py::arg("point_group") = std::nullopt, py::arg("tol") = std::nullopt,
         "Equivalent to :func:`make_canonical_lattice`");
+
+  m.def("make_equivalent_lattices", &make_equivalent_lattices,
+        py::arg("lattice"), py::arg("point_group"),
+        py::arg("tol") = std::nullopt,
+        R"pbdoc(
+    Returns the distinct lattices equivalent to a given lattice under a point
+    group
+
+    Applies each operation in `point_group` to `lattice`, and returns one
+    canonical representative per distinct resulting lattice -- i.e. one entry
+    per orbit element, not one entry per group operation. A lattice invariant
+    under all of `point_group` (e.g. a supercell lattice `n * unit` for a
+    cubic `unit` and the full cubic `point_group`) returns a single element.
+
+    Parameters
+    ----------
+    lattice : Lattice
+        The initial lattice.
+    point_group : list[:class:`SymOp`]
+        The point group used to generate equivalent lattices. Usually, for
+        example when finding the distinct equivalent supercells of a Prim, the
+        relevant point group is the the crystal point group
+        (:func:`make_prim_crystal_point_group`) of the Prim. Use the point group
+        of the primitive cell lattice (:func:`make_point_group`) to find
+        the distinct equivalent supercells of a pure lattice.
+    tol : Optional[float] = None
+        Tolerance used for comparison. Default is `lattice.tol()`.
+
+    Returns
+    -------
+    lattices : list[Lattice]
+        The distinct symmetrically equivalent lattices, each in canonical
+        form.
+    )pbdoc");
 
   m.def("fractional_to_cartesian", &fractional_to_cartesian, py::arg("lattice"),
         py::arg("coordinate_frac"), R"pbdoc(
@@ -4636,6 +4694,65 @@ PYBIND11_MODULE(_xtal, m) {
           The prim defining IntegralSiteCoordinate that will be transformed.
       )pbdoc")
       .def(
+          "matrix_frac",
+          [](xtal::UnitCellCoordRep const &self) { return self.point_matrix; },
+          R"pbdoc(
+          Returns :math:`\mathbf{P}`, the integer transformation matrix
+          applied to the integral unit cell coordinates,
+          :math:`\vec{u} = [i,j,k]`, as a shape=(3,3) integer array.
+          )pbdoc")
+      .def(
+          "sublattice_after",
+          [](xtal::UnitCellCoordRep const &self, Index sublattice) {
+            return self.sublattice_index.at(sublattice);
+          },
+          py::arg("sublattice"),
+          R"pbdoc(
+          Returns :math:`p_b`, the index of the sublattice that the input
+          sublattice is mapped to after transformation.
+
+          Parameters
+          ----------
+          sublattice : int
+              The initial sublattice index, `b`.
+
+          Returns
+          -------
+          sublattice_after : int
+              The sublattice index the site is mapped to.
+
+          Raises
+          ------
+          IndexError
+              If `sublattice` is out of range.
+          )pbdoc")
+      .def(
+          "tau_frac",
+          [](xtal::UnitCellCoordRep const &self, Index sublattice) {
+            return self.unitcell_indices.at(sublattice);
+          },
+          py::arg("sublattice"),
+          R"pbdoc(
+          Returns :math:`\vec{t}_{b}`, the unit cell indices of sites in the
+          origin unit cell after transformation (for each sublattice).
+
+          Parameters
+          ----------
+          sublattice : int
+              The initial sublattice index, `b`.
+
+          Returns
+          -------
+          tau_frac : numpy.ndarray[numpy.int64[3]]
+              The translation added, in addition to the transformation by
+              :func:`matrix_frac`.
+
+          Raises
+          ------
+          IndexError
+              If `sublattice` is out of range.
+          )pbdoc")
+      .def(
           "__mul__",
           [](xtal::UnitCellCoordRep const &rep,
              xtal::UnitCellCoord const &integral_site_coordinate) {
@@ -4672,7 +4789,54 @@ PYBIND11_MODULE(_xtal, m) {
         }
         ss << json;
         return ss.str();
-      });
+      })
+      .def_static(
+          "from_dict",  // IntegralSiteCoordinateRep.from_dict
+          [](const nlohmann::json &data) {
+            jsonParser json{data};
+            xtal::UnitCellCoordRep rep;
+            from_json(rep.point_matrix, json["matrix_frac"]);
+            from_json(rep.sublattice_index, json["sublattice_after"]);
+            rep.unitcell_indices.clear();
+            for (auto const &tjson : json["tau_frac"]) {
+              Eigen::Vector3l tau_frac;
+              from_json(tau_frac, tjson);
+              rep.unitcell_indices.push_back(tau_frac);
+            }
+            return rep;
+          },
+          "Construct an IntegralSiteCoordinateRep from a Python dict, in the "
+          "format documented by "
+          ":func:`~libcasm.xtal.IntegralSiteCoordinateRep.to_dict`.",
+          py::arg("data"))
+      .def(
+          "to_dict",
+          [](xtal::UnitCellCoordRep const &self) {
+            jsonParser json;
+            json["sublattice_after"] = self.sublattice_index;
+            json["matrix_frac"] = self.point_matrix;
+            json["tau_frac"] = jsonParser::array();
+            for (auto const &tau_frac : self.unitcell_indices) {
+              jsonParser tjson;
+              to_json(tau_frac, tjson, jsonParser::as_array());
+              json["tau_frac"].push_back(tjson);
+            }
+            return static_cast<nlohmann::json>(json);
+          },
+          R"pbdoc(
+          Represent the IntegralSiteCoordinateRep as a Python dict.
+
+          Returns
+          -------
+          data : dict
+              A Python dict with:
+
+              - ``"matrix_frac"``: shape=(3,3) integer array, :math:`\mathbf{P}`.
+              - ``"sublattice_after"``: list of int, length ``n_sublattice``,
+                :math:`\vec{p}`.
+              - ``"tau_frac"``: list of shape=(3,) integer arrays, length
+                ``n_sublattice``, :math:`\vec{t}_{b^{\ before}}`.
+          )pbdoc");
 
   m.def(
       "apply",

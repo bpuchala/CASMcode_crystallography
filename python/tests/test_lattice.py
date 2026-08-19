@@ -94,6 +94,69 @@ def test_make_canonical():
     )
 
 
+def test_make_canonical_lattice_with_point_group(simple_cubic_binary_prim):
+    # simple_cubic_binary_prim has a single basis site, so its crystal point
+    # group equals its lattice's own (full cubic, 48 operations) -- passing
+    # it explicitly should reproduce the no-argument (lattice point group)
+    # result exactly.
+    prim = simple_cubic_binary_prim
+    T = np.array(
+        [
+            [1, 0, 0],
+            [0, 2, 0],
+            [0, 0, 3],
+        ]
+    )
+    superlattice = xtal.Lattice(prim.lattice().column_vector_matrix() @ T)
+
+    default = xtal.make_canonical_lattice(superlattice)
+    with_point_group = xtal.make_canonical_lattice(
+        superlattice, point_group=prim.crystal_point_group(), tol=prim.lattice().tol()
+    )
+    assert default == with_point_group
+
+
+def test_make_equivalent_lattices(simple_cubic_binary_prim):
+    prim = simple_cubic_binary_prim
+    point_group = prim.crystal_point_group()
+    assert len(point_group) == 48
+
+    # A low-symmetry supercell: T = diag(1, 2, 3) on this orthogonal cubic
+    # lattice makes a box with three unequal, mutually perpendicular edges.
+    # The invariant subgroup has 8 elements.
+    # There are 48 / 8 = 6 distinct equivalent lattices.
+    T_low_sym = np.array(
+        [
+            [1, 0, 0],
+            [0, 2, 0],
+            [0, 0, 3],
+        ]
+    )
+    low_sym_superlattice = xtal.Lattice(
+        prim.lattice().column_vector_matrix() @ T_low_sym
+    )
+    low_sym_equivalents = xtal.make_equivalent_lattices(
+        low_sym_superlattice, point_group=point_group
+    )
+    assert len(low_sym_equivalents) == 6
+
+    canonical = xtal.make_canonical_lattice(
+        low_sym_superlattice, point_group=point_group
+    )
+    assert canonical in low_sym_equivalents
+
+    # A maximally-symmetric supercell (T = n * I) is invariant under every
+    # operation of the point group -- a single-element orbit.
+    T_high_sym = 3 * np.eye(3, dtype=int)
+    high_sym_superlattice = xtal.Lattice(
+        prim.lattice().column_vector_matrix() @ T_high_sym
+    )
+    high_sym_equivalents = xtal.make_equivalent_lattices(
+        high_sym_superlattice, point_group=point_group
+    )
+    assert len(high_sym_equivalents) == 1
+
+
 def test_lattice_comparison():
     L1 = xtal.Lattice(
         np.array(

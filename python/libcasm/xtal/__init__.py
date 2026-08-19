@@ -44,6 +44,7 @@ from ._xtal import (
     make_canonical_structure,
     make_csl,
     make_dscl,
+    make_equivalent_lattices,
     make_equivalent_property_values,
     make_itsybitsylattice,
     make_point_group,
