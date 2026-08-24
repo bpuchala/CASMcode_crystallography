@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   types that broke builds with updated macOS Command Line Tools (`libc++`).
 - Fixed `SymInfo` to initialize `_screw_glide_shift` to zero for identity and
   inversion operations (previously left uninitialized).
+- Fixed `make_factor_group` to bring operation translations within the
+  structure's lattice before sorting, so the identity operation is always
+  first. Previously, for a cell skewed relative to its primitive cell, a pure
+  translation could sort ahead of the identity, breaking consumers that require
+  the identity at index 0.
 
 ### Added
 

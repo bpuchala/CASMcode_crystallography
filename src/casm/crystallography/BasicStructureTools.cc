@@ -501,6 +501,9 @@ std::vector<SymOp> make_factor_group(const BasicStructure &struc) {
           prim_op);
     }
   }
+  // Bring translations within the structure's lattice, so that the identity
+  // operation (with tau == 0) sorts first
+  ::bring_within(&factor_group, struc.lattice());
   sort_factor_group(factor_group, struc.lattice());
   return factor_group;
 }

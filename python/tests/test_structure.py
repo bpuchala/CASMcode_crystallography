@@ -849,3 +849,44 @@ def test_combine_structures(example_structure_1):
         ),
     )
     assert combined.atom_type() == atom_type * 2
+
+
+def test_make_structure_factor_group_identity_first():
+    """The first factor group operation must be the identity, with tau == 0
+
+    Regression test: for a cell that is skewed relative to its primitive cell,
+    the enumerated translations were not brought within the cell before
+    sorting, so pure translations with negative fractional tau sorted ahead of
+    the identity.
+    """
+    # bcc Mg (a=3.55 Angstrom), in a skewed det=8 supercell
+    lattice_column_vector_matrix = np.array(
+        [
+            [-1.775, 5.325, -1.775],
+            [-1.775, -1.775, 8.875],
+            [-1.775, -1.775, -5.325],
+        ]
+    )
+    structure = xtal.Structure(
+        lattice=xtal.Lattice(lattice_column_vector_matrix),
+        atom_coordinate_frac=np.array(
+            [
+                [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875],
+                [0.0, 0.625, 0.25, 0.875, 0.5, 0.125, 0.75, 0.375],
+                [0.0, 0.750, 0.50, 0.250, 0.0, 0.750, 0.50, 0.250],
+            ]
+        ),
+        atom_type=["Mg"] * 8,
+    )
+
+    factor_group = xtal.make_structure_factor_group(structure)
+    assert len(factor_group) == 32
+
+    assert factor_group[0].op_type() == "identity"
+    assert np.allclose(factor_group[0].translation(), np.zeros(3))
+
+    # all translations must be within the structure's lattice
+    for op in factor_group:
+        tau_frac = np.linalg.solve(lattice_column_vector_matrix, op.translation())
+        assert np.all(tau_frac > -1e-5)
+        assert np.all(tau_frac < 1.0 - 1e-5)
