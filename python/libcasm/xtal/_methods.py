@@ -4,6 +4,7 @@ from collections import namedtuple
 from typing import Any, Callable, Optional, Union
 
 import numpy as np
+import numpy.typing as npt
 
 import libcasm.casmglobal
 import libcasm.xtal._xtal as _xtal
@@ -617,3 +618,748 @@ def combine_structures(
         atoms=atoms,
         global_properties=global_properties,
     )
+
+
+### Miller and Miller-Bravais indices ###
+
+# (u,v,w) -> (U,V,T,W), as a matrix acting on Miller direction indices
+_UVTW_FROM_UVW = np.array(
+    [
+        [2.0 / 3.0, -1.0 / 3.0, 0.0],
+        [-1.0 / 3.0, 2.0 / 3.0, 0.0],
+        [-1.0 / 3.0, -1.0 / 3.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+)
+
+# (U,V,T,W) -> (u,v,w), as a matrix acting on Miller-Bravais direction indices
+_UVW_FROM_UVTW = np.array(
+    [
+        [1.0, 0.0, -1.0, 0.0],
+        [0.0, 1.0, -1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+)
+
+# (h,k,l) -> (h,k,i,l), as a matrix acting on Miller plane indices
+_HKIL_FROM_HKL = np.array(
+    [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [-1.0, -1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+)
+
+# (h,k,i,l) -> (h,k,l), as a matrix acting on Miller-Bravais plane indices
+_HKL_FROM_HKIL = np.array(
+    [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+)
+
+
+def _as_indices_array(
+    indices: npt.ArrayLike,
+    dim: int,
+    what: str,
+    method: str,
+) -> np.ndarray:
+    """Validate and convert index input to a shape=(dim,) or shape=(dim,n) array"""
+    arr = np.asarray(indices, dtype=np.float64)
+    if arr.ndim not in (1, 2) or arr.shape[0] != dim:
+        raise ValueError(
+            f"Error in {method}: {what} must have shape=({dim},) or shape=({dim},n); "
+            f"received shape={arr.shape}"
+        )
+    return arr
+
+
+def _validate_sum_is_zero(
+    arr: np.ndarray,
+    constraint: str,
+    method: str,
+    abs_tol: float,
+) -> None:
+    """Validate the first three components of 4-index input sum to zero"""
+    total = arr[0] + arr[1] + arr[2]
+    if not np.all(np.abs(total) < abs_tol):
+        raise ValueError(
+            f"Error in {method}: the Miller-Bravais constraint {constraint} "
+            f"is not satisfied (to within abs_tol={abs_tol})"
+        )
+
+
+def miller_to_miller_bravais_direction(
+    uvw_indices: npt.ArrayLike,
+) -> np.ndarray:
+    r"""Convert Miller direction indices, :math:`[uvw]`, to Miller-Bravais direction
+    indices, :math:`[UVTW]`
+
+    Notes
+    -----
+    This is the *direction* (lattice vector) convention, in which
+
+    .. math::
+
+        U = (2u - v)/3, \quad V = (2v - u)/3, \quad T = -(U + V), \quad W = w,
+
+    so that :math:`U + V + T = 0` and
+    :math:`U \vec{a}_1 + V \vec{a}_2 + T \vec{a}_3 + W \vec{c}` is the same lattice
+    vector as :math:`u \vec{a}_1 + v \vec{a}_2 + w \vec{c}`, where
+    :math:`\vec{a}_3 = -(\vec{a}_1 + \vec{a}_2)`.
+
+    This is *not* the same transformation used for plane indices. For planes, use
+    :func:`~libcasm.xtal.miller_to_miller_bravais_plane`.
+
+    Integer :math:`[uvw]` generally maps to :math:`[UVTW]` with thirds. The
+    conventional integer form can be obtained using
+    :func:`~libcasm.xtal.scale_to_int`. For example:
+
+    .. code-block:: Python
+
+        >>> uvtw = xtal.miller_to_miller_bravais_direction([1.0, 1.0, 0.0])
+        >>> print(uvtw)
+        [ 0.33333333  0.33333333 -0.66666667  0.        ]
+        >>> print(xtal.scale_to_int(uvtw))
+        [ 1  1 -2  0]
+
+    Parameters
+    ----------
+    uvw_indices: array_like
+        The Miller direction indices, :math:`(u, v, w)`, either as a single direction,
+        with shape=(3,), or as columns of a shape=(3,n) array.
+
+    Returns
+    -------
+    uvtw_indices: numpy.ndarray[numpy.float64]
+        The Miller-Bravais direction indices, :math:`(U, V, T, W)`, with shape=(4,) or
+        shape=(4,n), matching the shape of `uvw_indices`. The output satisfies
+        :math:`U + V + T = 0`.
+
+    Raises
+    ------
+    ValueError
+        If `uvw_indices` does not have shape=(3,) or shape=(3,n).
+    """
+    arr = _as_indices_array(
+        uvw_indices, 3, "uvw_indices", "miller_to_miller_bravais_direction"
+    )
+    return _UVTW_FROM_UVW @ arr
+
+
+def miller_bravais_to_miller_direction(
+    uvtw_indices: npt.ArrayLike,
+    abs_tol: float = libcasm.casmglobal.TOL,
+) -> np.ndarray:
+    r"""Convert Miller-Bravais direction indices, :math:`[UVTW]`, to Miller direction
+    indices, :math:`[uvw]`
+
+    Notes
+    -----
+    This is the *direction* (lattice vector) convention, in which
+
+    .. math::
+
+        u = U - T, \quad v = V - T, \quad w = W.
+
+    The input must satisfy the Miller-Bravais direction constraint,
+    :math:`U + V + T = 0`.
+
+    This is *not* the same transformation used for plane indices. For planes, use
+    :func:`~libcasm.xtal.miller_bravais_to_miller_plane`.
+
+    Parameters
+    ----------
+    uvtw_indices: array_like
+        The Miller-Bravais direction indices, :math:`(U, V, T, W)`, either as a single
+        direction, with shape=(4,), or as columns of a shape=(4,n) array. Must satisfy
+        :math:`U + V + T = 0`.
+    abs_tol: float = :data:`~libcasm.casmglobal.TOL`
+        The absolute tolerance used to check the :math:`U + V + T = 0` constraint.
+
+    Returns
+    -------
+    uvw_indices: numpy.ndarray[numpy.float64]
+        The Miller direction indices, :math:`(u, v, w)`, with shape=(3,) or
+        shape=(3,n), matching the shape of `uvtw_indices`.
+
+    Raises
+    ------
+    ValueError
+        If `uvtw_indices` does not have shape=(4,) or shape=(4,n), or if the
+        :math:`U + V + T = 0` constraint is not satisfied to within `abs_tol`.
+    """
+    arr = _as_indices_array(
+        uvtw_indices, 4, "uvtw_indices", "miller_bravais_to_miller_direction"
+    )
+    _validate_sum_is_zero(
+        arr, "U + V + T = 0", "miller_bravais_to_miller_direction", abs_tol
+    )
+    return _UVW_FROM_UVTW @ arr
+
+
+def miller_to_miller_bravais_plane(
+    hkl_indices: npt.ArrayLike,
+) -> np.ndarray:
+    r"""Convert Miller plane indices, :math:`(hkl)`, to Miller-Bravais plane indices,
+    :math:`(hkil)`
+
+    Notes
+    -----
+    This is the *plane* (reciprocal lattice vector) convention, in which
+
+    .. math::
+
+        i = -(h + k),
+
+    with :math:`h`, :math:`k`, and :math:`l` unchanged, so that
+    :math:`h + k + i = 0`. The fourth index is redundant: it is the intercept index
+    for the :math:`\vec{a}_3 = -(\vec{a}_1 + \vec{a}_2)` axis.
+
+    This is *not* the same transformation used for direction indices. For directions,
+    use :func:`~libcasm.xtal.miller_to_miller_bravais_direction`.
+
+    Parameters
+    ----------
+    hkl_indices: array_like
+        The Miller plane indices, :math:`(h, k, l)`, either as a single plane, with
+        shape=(3,), or as columns of a shape=(3,n) array.
+
+    Returns
+    -------
+    hkil_indices: numpy.ndarray[numpy.float64]
+        The Miller-Bravais plane indices, :math:`(h, k, i, l)`, with shape=(4,) or
+        shape=(4,n), matching the shape of `hkl_indices`. The output satisfies
+        :math:`h + k + i = 0`.
+
+    Raises
+    ------
+    ValueError
+        If `hkl_indices` does not have shape=(3,) or shape=(3,n).
+    """
+    arr = _as_indices_array(
+        hkl_indices, 3, "hkl_indices", "miller_to_miller_bravais_plane"
+    )
+    return _HKIL_FROM_HKL @ arr
+
+
+def miller_bravais_to_miller_plane(
+    hkil_indices: npt.ArrayLike,
+    abs_tol: float = libcasm.casmglobal.TOL,
+) -> np.ndarray:
+    r"""Convert Miller-Bravais plane indices, :math:`(hkil)`, to Miller plane indices,
+    :math:`(hkl)`
+
+    Notes
+    -----
+    This is the *plane* (reciprocal lattice vector) convention, in which the redundant
+    third index, :math:`i = -(h + k)`, is simply dropped.
+
+    The input must satisfy the Miller-Bravais plane constraint,
+    :math:`h + k + i = 0`.
+
+    This is *not* the same transformation used for direction indices. For directions,
+    use :func:`~libcasm.xtal.miller_bravais_to_miller_direction`.
+
+    Parameters
+    ----------
+    hkil_indices: array_like
+        The Miller-Bravais plane indices, :math:`(h, k, i, l)`, either as a single
+        plane, with shape=(4,), or as columns of a shape=(4,n) array. Must satisfy
+        :math:`h + k + i = 0`.
+    abs_tol: float = :data:`~libcasm.casmglobal.TOL`
+        The absolute tolerance used to check the :math:`h + k + i = 0` constraint.
+
+    Returns
+    -------
+    hkl_indices: numpy.ndarray[numpy.float64]
+        The Miller plane indices, :math:`(h, k, l)`, with shape=(3,) or shape=(3,n),
+        matching the shape of `hkil_indices`.
+
+    Raises
+    ------
+    ValueError
+        If `hkil_indices` does not have shape=(4,) or shape=(4,n), or if the
+        :math:`h + k + i = 0` constraint is not satisfied to within `abs_tol`.
+    """
+    arr = _as_indices_array(
+        hkil_indices, 4, "hkil_indices", "miller_bravais_to_miller_plane"
+    )
+    _validate_sum_is_zero(
+        arr, "h + k + i = 0", "miller_bravais_to_miller_plane", abs_tol
+    )
+    return _HKL_FROM_HKIL @ arr
+
+
+### Rationalization of indices ###
+
+
+def scale_to_int_if_possible(
+    v: npt.ArrayLike,
+    max_element: int = 10,
+    abs_tol: float = libcasm.casmglobal.TOL,
+) -> Optional[np.ndarray]:
+    """Scale a vector to the smallest parallel integer vector, if possible
+
+    Notes
+    -----
+    This method finds the smallest positive integer :math:`s \\le` `max_element` such
+    that :math:`s \\vec{v} / \\max_i |v_i|` has all components within `abs_tol` of an
+    integer, and returns those integers. Because the input is first normalized so that
+    its largest component has magnitude 1, the result always satisfies
+    :math:`\\max_i |v_i| \\le` `max_element`, and it has no common integer factor.
+
+    The sign of the input is preserved. This is the standard way to obtain integer
+    Miller or Miller-Bravais indices from a vector of fractional coordinates.
+
+    Parameters
+    ----------
+    v: array_like
+        A vector, with shape=(n,).
+    max_element: int = 10
+        The maximum allowed magnitude of any element of the result. If no scaling with
+        all elements of magnitude less than or equal to `max_element` gives integer
+        values (to within `abs_tol`), then the vector is treated as irrational and
+        None is returned.
+    abs_tol: float = :data:`~libcasm.casmglobal.TOL`
+        The absolute tolerance used to check whether a scaled element is an integer.
+
+    Returns
+    -------
+    scaled_v: Optional[numpy.ndarray[numpy.int64]]
+        The smallest integer vector parallel to `v`, with shape=(n,), or None if `v`
+        cannot be scaled to integers with all elements of magnitude less than or equal
+        to `max_element`.
+
+    Raises
+    ------
+    ValueError
+        If `v` does not have shape=(n,), if `max_element` is less than 1, or if `v`
+        is the zero vector (all elements with magnitude less than `abs_tol`).
+    """
+    arr = np.asarray(v, dtype=np.float64)
+    if arr.ndim != 1:
+        raise ValueError(
+            "Error in scale_to_int_if_possible: v must have shape=(n,); "
+            f"received shape={arr.shape}"
+        )
+    if max_element < 1:
+        raise ValueError("Error in scale_to_int_if_possible: max_element must be >= 1")
+    max_abs = np.max(np.abs(arr))
+    if max_abs < abs_tol:
+        raise ValueError("Error in scale_to_int_if_possible: v is the zero vector")
+
+    unit = arr / max_abs
+    for scale in range(1, int(max_element) + 1):
+        scaled = scale * unit
+        if np.all(np.abs(scaled - np.round(scaled)) < abs_tol):
+            return np.round(scaled).astype(np.int64)
+    return None
+
+
+def scale_to_int(
+    v: npt.ArrayLike,
+    max_element: int = 10,
+    abs_tol: float = libcasm.casmglobal.TOL,
+) -> np.ndarray:
+    """Scale a vector to the smallest parallel integer vector
+
+    Notes
+    -----
+    This is equivalent to :func:`~libcasm.xtal.scale_to_int_if_possible`, except that
+    it raises instead of returning None when the vector cannot be scaled to integers.
+
+    Parameters
+    ----------
+    v: array_like
+        A vector, with shape=(n,).
+    max_element: int = 10
+        The maximum allowed magnitude of any element of the result.
+    abs_tol: float = :data:`~libcasm.casmglobal.TOL`
+        The absolute tolerance used to check whether a scaled element is an integer.
+
+    Returns
+    -------
+    scaled_v: numpy.ndarray[numpy.int64]
+        The smallest integer vector parallel to `v`, with shape=(n,).
+
+    Raises
+    ------
+    ValueError
+        If `v` does not have shape=(n,), if `max_element` is less than 1, if `v` is
+        the zero vector, or if `v` cannot be scaled to integers with all elements of
+        magnitude less than or equal to `max_element`.
+    """
+    scaled_v = scale_to_int_if_possible(v, max_element=max_element, abs_tol=abs_tol)
+    if scaled_v is None:
+        raise ValueError(
+            "Error in scale_to_int: could not scale to integers with all elements "
+            f"of magnitude <= max_element={max_element}"
+        )
+    return scaled_v
+
+
+def scale_columns_to_int_if_possible(
+    M: npt.ArrayLike,
+    max_element: int = 10,
+    abs_tol: float = libcasm.casmglobal.TOL,
+) -> np.ndarray:
+    """Scale the columns of a matrix to integer vectors, where possible
+
+    Notes
+    -----
+    Each column is scaled independently, using
+    :func:`~libcasm.xtal.scale_to_int_if_possible`. Columns which cannot be scaled to
+    integers, and columns which are the zero vector, are copied unchanged. To
+    determine which columns were successfully scaled, use
+    :func:`~libcasm.xtal.scale_to_int_if_possible` column by column.
+
+    Parameters
+    ----------
+    M: array_like
+        A matrix, with shape=(m,n), with the vectors to be scaled as columns.
+    max_element: int = 10
+        The maximum allowed magnitude of any element of a scaled column.
+    abs_tol: float = :data:`~libcasm.casmglobal.TOL`
+        The absolute tolerance used to check whether a scaled element is an integer.
+
+    Returns
+    -------
+    scaled_M: numpy.ndarray[numpy.float64]
+        A copy of `M`, with shape=(m,n), in which each column that can be scaled to a
+        parallel integer vector with all elements of magnitude less than or equal to
+        `max_element` is replaced by that integer vector. The result has floating
+        point type because unscaled columns are preserved.
+
+    Raises
+    ------
+    ValueError
+        If `M` does not have shape=(m,n), or if `max_element` is less than 1.
+    """
+    arr = np.asarray(M, dtype=np.float64)
+    if arr.ndim != 2:
+        raise ValueError(
+            "Error in scale_columns_to_int_if_possible: M must have shape=(m,n); "
+            f"received shape={arr.shape}"
+        )
+    if max_element < 1:
+        raise ValueError(
+            "Error in scale_columns_to_int_if_possible: max_element must be >= 1"
+        )
+    result = arr.copy()
+    for i in range(arr.shape[1]):
+        column = arr[:, i]
+        if np.max(np.abs(column)) < abs_tol:
+            continue
+        scaled_column = scale_to_int_if_possible(
+            column, max_element=max_element, abs_tol=abs_tol
+        )
+        if scaled_column is not None:
+            result[:, i] = scaled_column
+    return result
+
+
+### Cartesian coordinates <-> Miller indices ###
+
+
+def miller_direction_to_cartesian(
+    lattice: _xtal.Lattice,
+    uvw_indices: npt.ArrayLike,
+) -> np.ndarray:
+    r"""Convert Miller direction indices, :math:`[uvw]`, to a Cartesian vector
+
+    Notes
+    -----
+    The Cartesian vector is
+    :math:`\vec{d} = u \vec{a} + v \vec{b} + w \vec{c} = L \vec{x}`, where :math:`L`
+    is the lattice column vector matrix and
+    :math:`\vec{x} = (u, v, w)`. In other words, Miller direction indices are the
+    fractional coordinates of a lattice vector, so this is equivalent to
+    :func:`~libcasm.xtal.fractional_to_cartesian`.
+
+    Parameters
+    ----------
+    lattice: ~libcasm.xtal.Lattice
+        The lattice that the indices are relative to. To obtain conventional cell
+        indices, pass the conventional cell lattice.
+    uvw_indices: array_like
+        The Miller direction indices, :math:`(u, v, w)`, either as a single direction,
+        with shape=(3,), or as columns of a shape=(3,n) array.
+
+    Returns
+    -------
+    direction_cart: numpy.ndarray[numpy.float64]
+        The direction in Cartesian coordinates, with shape=(3,) or shape=(3,n),
+        matching the shape of `uvw_indices`. The vector is not normalized: its length
+        is the length of the lattice vector with the given indices.
+
+    Raises
+    ------
+    ValueError
+        If `uvw_indices` does not have shape=(3,) or shape=(3,n).
+    """
+    arr = _as_indices_array(
+        uvw_indices, 3, "uvw_indices", "miller_direction_to_cartesian"
+    )
+    return lattice.column_vector_matrix() @ arr
+
+
+def miller_plane_to_cartesian(
+    lattice: _xtal.Lattice,
+    hkl_indices: npt.ArrayLike,
+) -> np.ndarray:
+    r"""Convert Miller plane indices, :math:`(hkl)`, to a Cartesian plane normal
+
+    Notes
+    -----
+    Miller plane indices are the fractional coordinates of a reciprocal lattice
+    vector, :math:`\vec{G} = h \vec{a}^{*} + k \vec{b}^{*} + l \vec{c}^{*} =
+    R \vec{x}`, where :math:`R` is the reciprocal lattice column vector matrix,
+    from :func:`~libcasm.xtal.Lattice.reciprocal`, and :math:`\vec{x} = (h, k, l)`.
+    The reciprocal lattice vector :math:`\vec{G}` is normal to the :math:`(hkl)`
+    plane.
+
+    Parameters
+    ----------
+    lattice: ~libcasm.xtal.Lattice
+        The lattice that the indices are relative to. To use conventional cell
+        indices, pass the conventional cell lattice.
+    hkl_indices: array_like
+        The Miller plane indices, :math:`(h, k, l)`, either as a single plane, with
+        shape=(3,), or as columns of a shape=(3,n) array.
+
+    Returns
+    -------
+    plane_normal_cart: numpy.ndarray[numpy.float64]
+        The plane normal in Cartesian coordinates, with shape=(3,) or shape=(3,n),
+        matching the shape of `hkl_indices`. The vector is not normalized: because
+        CASM's reciprocal lattice includes the factor :math:`2\pi`, its length is
+        :math:`2\pi / d_{hkl}`, where :math:`d_{hkl}` is the interplanar spacing.
+
+    Raises
+    ------
+    ValueError
+        If `hkl_indices` does not have shape=(3,) or shape=(3,n).
+    """
+    arr = _as_indices_array(hkl_indices, 3, "hkl_indices", "miller_plane_to_cartesian")
+    return lattice.reciprocal().column_vector_matrix() @ arr
+
+
+def cartesian_to_miller_direction(
+    lattice: _xtal.Lattice,
+    direction_cart: npt.ArrayLike,
+    max_element: int = 10,
+    abs_tol: float = libcasm.casmglobal.TOL,
+) -> Optional[np.ndarray]:
+    r"""Convert a Cartesian direction to Miller direction indices, :math:`[uvw]`
+
+    Notes
+    -----
+    The Cartesian direction is expressed in fractional coordinates by solving
+    :math:`L \vec{x} = \vec{d}`, where :math:`L` is the lattice column vector matrix,
+    and then :math:`\vec{x}` is scaled to the smallest parallel integer vector using
+    :func:`~libcasm.xtal.scale_to_int_if_possible`.
+
+    Only the direction of `direction_cart` matters; its magnitude does not.
+
+    To obtain conventional cell indices, pass the conventional cell lattice. There is
+    no separate conventional cell code path.
+
+    To obtain Miller-Bravais direction indices, :math:`[UVTW]`, for hexagonal or
+    trigonal lattices, pass the result to
+    :func:`~libcasm.xtal.miller_to_miller_bravais_direction` and then to
+    :func:`~libcasm.xtal.scale_to_int`.
+
+    Parameters
+    ----------
+    lattice: ~libcasm.xtal.Lattice
+        The lattice that the resulting indices are relative to.
+    direction_cart: array_like
+        A direction in Cartesian coordinates, with shape=(3,).
+    max_element: int = 10
+        The maximum allowed magnitude of any resulting index. If the direction cannot
+        be expressed with indices of magnitude less than or equal to `max_element`, it
+        is treated as irrational and None is returned.
+    abs_tol: float = :data:`~libcasm.casmglobal.TOL`
+        The absolute tolerance used to check whether a scaled element is an integer.
+
+    Returns
+    -------
+    uvw_indices: Optional[numpy.ndarray[numpy.int64]]
+        The Miller direction indices, :math:`(u, v, w)`, with shape=(3,), or None if
+        the direction is irrational with respect to `lattice` (i.e. it cannot be
+        expressed with indices of magnitude less than or equal to `max_element`).
+
+    Raises
+    ------
+    ValueError
+        If `direction_cart` does not have shape=(3,), if `max_element` is less than 1,
+        or if `direction_cart` is the zero vector.
+    """
+    arr = np.asarray(direction_cart, dtype=np.float64)
+    if arr.shape != (3,):
+        raise ValueError(
+            "Error in cartesian_to_miller_direction: direction_cart must have "
+            f"shape=(3,); received shape={arr.shape}"
+        )
+    direction_frac = np.linalg.solve(lattice.column_vector_matrix(), arr)
+    return scale_to_int_if_possible(
+        direction_frac, max_element=max_element, abs_tol=abs_tol
+    )
+
+
+def cartesian_to_miller_plane(
+    lattice: _xtal.Lattice,
+    plane_normal_cart: npt.ArrayLike,
+    max_element: int = 10,
+    abs_tol: float = libcasm.casmglobal.TOL,
+) -> Optional[np.ndarray]:
+    r"""Convert a Cartesian plane normal to Miller plane indices, :math:`(hkl)`
+
+    Notes
+    -----
+    The Cartesian plane normal is expressed in fractional coordinates with respect to
+    the reciprocal lattice by solving :math:`R \vec{x} = \vec{n}`, where :math:`R` is
+    the reciprocal lattice column vector matrix, from
+    :func:`~libcasm.xtal.Lattice.reciprocal`, and then :math:`\vec{x}` is scaled to
+    the smallest parallel integer vector using
+    :func:`~libcasm.xtal.scale_to_int_if_possible`.
+
+    Only the direction of `plane_normal_cart` matters; its magnitude does not, so the
+    factor :math:`2\pi` in CASM's reciprocal lattice has no effect on the result.
+
+    To obtain conventional cell indices, pass the conventional cell lattice. There is
+    no separate conventional cell code path.
+
+    To obtain Miller-Bravais plane indices, :math:`(hkil)`, for hexagonal or trigonal
+    lattices, pass the result to
+    :func:`~libcasm.xtal.miller_to_miller_bravais_plane`.
+
+    Parameters
+    ----------
+    lattice: ~libcasm.xtal.Lattice
+        The lattice that the resulting indices are relative to.
+    plane_normal_cart: array_like
+        A plane normal in Cartesian coordinates, with shape=(3,).
+    max_element: int = 10
+        The maximum allowed magnitude of any resulting index. If the plane normal
+        cannot be expressed with indices of magnitude less than or equal to
+        `max_element`, it is treated as irrational and None is returned.
+    abs_tol: float = :data:`~libcasm.casmglobal.TOL`
+        The absolute tolerance used to check whether a scaled element is an integer.
+
+    Returns
+    -------
+    hkl_indices: Optional[numpy.ndarray[numpy.int64]]
+        The Miller plane indices, :math:`(h, k, l)`, with shape=(3,), or None if the
+        plane normal is irrational with respect to `lattice` (i.e. it cannot be
+        expressed with indices of magnitude less than or equal to `max_element`).
+
+    Raises
+    ------
+    ValueError
+        If `plane_normal_cart` does not have shape=(3,), if `max_element` is less than
+        1, or if `plane_normal_cart` is the zero vector.
+    """
+    arr = np.asarray(plane_normal_cart, dtype=np.float64)
+    if arr.shape != (3,):
+        raise ValueError(
+            "Error in cartesian_to_miller_plane: plane_normal_cart must have "
+            f"shape=(3,); received shape={arr.shape}"
+        )
+    reciprocal_column_vector_matrix = lattice.reciprocal().column_vector_matrix()
+    plane_frac_recip = np.linalg.solve(reciprocal_column_vector_matrix, arr)
+    return scale_to_int_if_possible(
+        plane_frac_recip, max_element=max_element, abs_tol=abs_tol
+    )
+
+
+### Lattice classification ###
+
+# Proper rotation angles, in degrees, of the operations generated by a
+# three-fold or six-fold rotation axis (excluding the two-fold rotation, which
+# is not unique to three-fold and six-fold axes)
+_THREEFOLD_AND_SIXFOLD_ANGLES = [60.0, 120.0, 240.0, 300.0]
+
+
+def is_hexagonal_or_trigonal(
+    lattice: Optional[_xtal.Lattice] = None,
+    point_group: Optional[list[_xtal.SymOp]] = None,
+    angle_tol: float = 1e-3,
+) -> bool:
+    """Check if a lattice or point group is hexagonal or trigonal
+
+    Notes
+    -----
+    A lattice belongs to the hexagonal or trigonal (rhombohedral) crystal family if
+    and only if it has exactly one three-fold or six-fold rotation axis. Cubic
+    lattices also have three-fold rotations, but they have four distinct three-fold
+    axes, and no other crystal family has any.
+
+    This method therefore collects the axes, up to sign, of all proper rotations by
+    60, 120, 240, or 300 degrees, and returns True if and only if there is exactly one
+    such axis. Improper operations (rotoinversions, mirrors) are ignored. Screw
+    operations are treated as proper rotations, so a factor group may also be given.
+
+    This is the standard test for whether Miller-Bravais (four-index) notation
+    applies. See :func:`~libcasm.xtal.miller_to_miller_bravais_direction` and
+    :func:`~libcasm.xtal.miller_to_miller_bravais_plane`.
+
+    Parameters
+    ----------
+    lattice: Optional[~libcasm.xtal.Lattice] = None
+        A lattice. If `point_group` is None, the lattice point group, from
+        :func:`~libcasm.xtal.make_point_group`, is used. One of `lattice` or
+        `point_group` is required.
+    point_group: Optional[list[~libcasm.xtal.SymOp]] = None
+        A point group, factor group, or crystal point group to check directly. If
+        provided, `lattice` is ignored. This allows checking the symmetry of a
+        structure or prim, which may be lower than the symmetry of its lattice.
+    angle_tol: float = 1e-3
+        The absolute tolerance, in degrees, used when comparing rotation angles.
+
+    Returns
+    -------
+    is_hexagonal_or_trigonal: bool
+        True if there is exactly one three-fold or six-fold proper rotation axis;
+        otherwise False.
+
+    Raises
+    ------
+    ValueError
+        If both `lattice` and `point_group` are None.
+    """
+    if point_group is None:
+        if lattice is None:
+            raise ValueError(
+                "Error in is_hexagonal_or_trigonal: one of `lattice` or "
+                "`point_group` is required"
+            )
+        point_group = _xtal.make_point_group(lattice)
+
+    axes: list[np.ndarray] = []
+    for op in point_group:
+        if op.op_type() not in ("rotation_or_screw", "rotation", "screw"):
+            continue
+        angle = op.angle()
+        if not any(
+            math.isclose(angle, x, abs_tol=angle_tol)
+            for x in _THREEFOLD_AND_SIXFOLD_ANGLES
+        ):
+            continue
+        axis = np.asarray(op.axis(), dtype=np.float64)
+        norm = np.linalg.norm(axis)
+        if norm < libcasm.casmglobal.TOL:
+            continue
+        axis = axis / norm
+        if not any(
+            np.allclose(axis, x, atol=libcasm.casmglobal.TOL)
+            or np.allclose(axis, -x, atol=libcasm.casmglobal.TOL)
+            for x in axes
+        ):
+            axes.append(axis)
+
+    return len(axes) == 1

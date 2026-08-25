@@ -54,6 +54,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tol` arguments, so it can be used to canonicalize a supercell lattice
   under a prim's crystal point group (previously only the lattice's own
   point group was usable).
+- Added Miller / Miller-Bravais index conversions to `libcasm.xtal`:
+  `miller_to_miller_bravais_direction` and
+  `miller_bravais_to_miller_direction` for directions
+  (:math:`[uvw] \leftrightarrow [UVTW]`, with :math:`U + V + T = 0`), and
+  `miller_to_miller_bravais_plane` and `miller_bravais_to_miller_plane` for
+  planes (:math:`(hkl) \leftrightarrow (hkil)`, with :math:`h + k + i = 0`).
+  Each accepts a single set of indices, with shape=(3,) or shape=(4,), or
+  multiple sets as columns of a shape=(3,n) or shape=(4,n) array.
+- Added `scale_to_int`, `scale_to_int_if_possible`, and
+  `scale_columns_to_int_if_possible` to `libcasm.xtal`, which scale a vector to
+  the smallest parallel integer vector with all elements no larger in magnitude
+  than `max_element`. `scale_to_int` raises `ValueError` if that is not
+  possible; `scale_to_int_if_possible` returns `None`;
+  `scale_columns_to_int_if_possible` scales each column independently and
+  copies unscalable columns unchanged.
+- Added `cartesian_to_miller_plane` and `cartesian_to_miller_direction` to
+  `libcasm.xtal`, which convert a Cartesian plane normal or direction to
+  integer `(hkl)` or `[uvw]` indices relative to a given `Lattice`, returning
+  `None` if the plane or direction is irrational. Conventional cell indices are
+  obtained by passing the conventional cell lattice. Also added the inverses,
+  `miller_plane_to_cartesian` and `miller_direction_to_cartesian`.
+- Added `is_hexagonal_or_trigonal` to `libcasm.xtal`, which checks whether a
+  `Lattice` (or an explicitly provided point group) has exactly one three-fold
+  or six-fold proper rotation axis, and therefore whether Miller-Bravais
+  four-index notation applies.
 
 
 ## [3.0a1] - 2026-03-02

@@ -244,3 +244,54 @@ Specifically, the most standard orientation of the lattice vectors (represented 
 
 The comparison operators (``<``, ``<=``, ``>``, ``>=``) can be used to compare lattices according to these criteria.
 
+
+
+.. _lattice-miller-indices:
+
+Miller and Miller-Bravais indices
+---------------------------------
+
+Miller indices are the fractional coordinates of a lattice vector or a reciprocal lattice vector:
+
+- A direction, :math:`[uvw]`, has the Cartesian representation :math:`u \vec{a} + v \vec{b} + w \vec{c}`, obtained using :func:`~libcasm.xtal.miller_direction_to_cartesian`.
+- A plane, :math:`(hkl)`, has the normal :math:`h \vec{a}^{*} + k \vec{b}^{*} + l \vec{c}^{*}`, obtained using :func:`~libcasm.xtal.miller_plane_to_cartesian`.
+
+The inverse conversions, :func:`~libcasm.xtal.cartesian_to_miller_direction` and :func:`~libcasm.xtal.cartesian_to_miller_plane`, solve for the fractional coordinates and then scale them to the smallest parallel integer vector using :func:`~libcasm.xtal.scale_to_int_if_possible`. They return None if the direction or plane is irrational with respect to the lattice, meaning it cannot be expressed with indices smaller in magnitude than the ``max_element`` parameter:
+
+.. code-block:: Python
+
+    >>> import libcasm.xtal as xtal
+    >>> import libcasm.xtal.lattices as xtal_lattices
+    >>> lattice = xtal_lattices.hexagonal(a=3.23, c=5.17)
+    >>> n_cart = xtal.miller_plane_to_cartesian(lattice, [1, 0, 2])
+    >>> print(xtal.cartesian_to_miller_plane(lattice, n_cart))
+    [1 0 2]
+
+Both methods take the lattice that the indices should be relative to, so conventional cell indices are obtained by passing the conventional cell lattice.
+
+For hexagonal and trigonal lattices, the four-index Miller-Bravais notation makes symmetrically equivalent directions and planes have permutations of the same indices. The two conversions are *not* the same:
+
+- For directions, :math:`[uvw] \rightarrow [UVTW]`, with :math:`U = (2u-v)/3`, :math:`V = (2v-u)/3`, :math:`T = -(U+V)`, and :math:`W = w`, using :func:`~libcasm.xtal.miller_to_miller_bravais_direction`. The output satisfies :math:`U + V + T = 0`. Because integer :math:`[uvw]` generally maps to :math:`[UVTW]` with thirds, the result is usually passed to :func:`~libcasm.xtal.scale_to_int`.
+- For planes, :math:`(hkl) \rightarrow (hkil)`, with :math:`i = -(h+k)` inserted and :math:`h`, :math:`k`, :math:`l` unchanged, using :func:`~libcasm.xtal.miller_to_miller_bravais_plane`. The output satisfies :math:`h + k + i = 0`.
+
+.. code-block:: Python
+
+    >>> # the close-packed direction, <11-20>
+    >>> uvtw = xtal.miller_to_miller_bravais_direction([1, 1, 0])
+    >>> print(xtal.scale_to_int(uvtw))
+    [ 1  1 -2  0]
+
+    >>> # the tension twinning plane, {10-12}
+    >>> print(xtal.miller_to_miller_bravais_plane([1, 0, 2]))
+    [ 1.  0. -1.  2.]
+
+The inverse conversions are :func:`~libcasm.xtal.miller_bravais_to_miller_direction` and :func:`~libcasm.xtal.miller_bravais_to_miller_plane`. All four methods accept a single set of indices, or multiple sets as the columns of a two-dimensional array.
+
+Whether the four-index notation applies can be checked using :func:`~libcasm.xtal.is_hexagonal_or_trigonal`, which returns True if and only if the lattice has exactly one three-fold or six-fold proper rotation axis:
+
+.. code-block:: Python
+
+    >>> print(xtal.is_hexagonal_or_trigonal(xtal_lattices.hexagonal(a=3.23, c=5.17)))
+    True
+    >>> print(xtal.is_hexagonal_or_trigonal(xtal_lattices.FCC(a=4.0)))
+    False
